@@ -11,16 +11,7 @@ import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
 
-public interface StreamDatabaseDriver {
-	
-	public void connect() 
-			throws SQLException, ClassNotFoundException;
-	
-	public void close() 
-			throws SQLException;
-	
-	public void selectDatabase(String username) 
-			throws SQLException, ClassNotFoundException;
+public interface StreamDatabaseDriver extends DatabaseDriver {
 	
 	public RuleCollection getRules() 
 			throws SQLException;
@@ -30,7 +21,6 @@ public interface StreamDatabaseDriver {
 	
 	public void deleteAllRules() 
 			throws SQLException;
-	
 	
 	public void createStream(Stream stream) 
 			throws SQLException, ClassNotFoundException;
@@ -52,5 +42,7 @@ public interface StreamDatabaseDriver {
 	
 	public void deleteAllStreams() 
 			throws SQLException;
+
+	public void setCurrentUser(String username);
 	
 }

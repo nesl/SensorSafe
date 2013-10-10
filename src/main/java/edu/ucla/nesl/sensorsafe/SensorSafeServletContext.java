@@ -7,7 +7,8 @@ import javax.servlet.ServletContextListener;
 
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.informix.InformixDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.informix.InformixStreamDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.informix.InformixUserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class SensorSafeServletContext implements ServletContextListener {
@@ -17,7 +18,7 @@ public class SensorSafeServletContext implements ServletContextListener {
 	
 	public static StreamDatabaseDriver getStreamDatabase(String username) throws ClassNotFoundException, SQLException {
 		if (streamDb != null)
-			streamDb.selectDatabase(username);
+			streamDb.setCurrentUser(username);
 		return streamDb;
 	}
 
@@ -44,11 +45,10 @@ public class SensorSafeServletContext implements ServletContextListener {
 	public void contextInitialized(ServletContextEvent arg0) {
 		Log.info("SensorSafe starting up..");
 		try {
-			streamDb = InformixDatabaseDriver.INSTANCE;
-			userDb = InformixDatabaseDriver.INSTANCE;
+			streamDb = InformixStreamDatabaseDriver.getInstance();
+			userDb = InformixUserDatabaseDriver.getInstance();
 			streamDb.connect();
 			userDb.connect();
-			userDb.prepareAdminDatabase();
 		} catch (ClassNotFoundException | SQLException e) {
 			e.printStackTrace();
 		}

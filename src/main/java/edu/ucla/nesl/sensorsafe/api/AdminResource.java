@@ -55,6 +55,8 @@ public class AdminResource {
 			db.registerOwner(newOwner);
 		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
 		}
 		
 		return new ResponseMsg("Successfully added new owner.");

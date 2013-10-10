@@ -1,4 +1,4 @@
-package edu.ucla.nesl.sensorsafe.informix;
+package edu.ucla.nesl.sensorsafe.db.informix;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -7,7 +7,6 @@ import java.sql.SQLException;
 import edu.ucla.nesl.sensorsafe.Const;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.User;
-import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 public class InformixUserDatabaseDriver extends InformixDatabaseDriver implements UserDatabaseDriver {
 
@@ -120,8 +119,8 @@ public class InformixUserDatabaseDriver extends InformixDatabaseDriver implement
 				pstmt.executeUpdate();
 				pstmt.close();
 			} catch (SQLException e) {
-				if (e.toString().contains("duplicate value in a UNIQUE INDEX column"))
-					throw WebExceptionBuilder.buildBadRequest("Username already registered.");
+				if (e.toString().contains("Unique constraint") && e.toString().contains("violated."))
+					throw new IllegalArgumentException("Username already registered.");
 				else
 					throw e;
 			} finally {

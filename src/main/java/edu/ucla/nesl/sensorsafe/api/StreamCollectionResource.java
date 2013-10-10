@@ -63,6 +63,8 @@ public class StreamCollectionResource {
 			db.createStream(stream);
 		} catch (SQLException | ClassNotFoundException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
 		}
     	
     	return "Successfully created a new stream: " + stream.name;

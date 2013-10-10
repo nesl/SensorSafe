@@ -3,6 +3,7 @@ package edu.ucla.nesl.sensorsafe.db;
 import java.sql.SQLException;
 import java.util.List;
 
+import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -28,7 +29,7 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void addTuple(String name, String strTuple) 
 			throws SQLException;
 	
-	public JSONObject queryStream(String name, String startTime, String endTime, String expr) 
+	public JSONArray queryStream(String name, String startTime, String endTime, String expr) 
 			throws SQLException, JsonProcessingException;
 	
 	public Stream getStreamInfo(String name) 

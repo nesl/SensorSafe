@@ -1,4 +1,4 @@
-package edu.ucla.nesl.sensorsafe.informix;
+package edu.ucla.nesl.sensorsafe.db.informix;
 
 import java.sql.Connection;
 import java.sql.DriverManager;

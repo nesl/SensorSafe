@@ -7,8 +7,8 @@ import javax.servlet.ServletContextListener;
 
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.informix.InformixStreamDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.informix.InformixUserDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixStreamDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class SensorSafeServletContext implements ServletContextListener {
@@ -32,10 +32,11 @@ public class SensorSafeServletContext implements ServletContextListener {
 
 	@Override
 	public void contextDestroyed(ServletContextEvent arg0) {
-		Log.info("SensorSafe closing down..");
 		try {
-			streamDb.close();
-			userDb.close();
+			if (streamDb != null) 
+				streamDb.close();
+			if (userDb != null)
+				userDb.close();
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
@@ -43,7 +44,6 @@ public class SensorSafeServletContext implements ServletContextListener {
 
 	@Override
 	public void contextInitialized(ServletContextEvent arg0) {
-		Log.info("SensorSafe starting up..");
 		try {
 			streamDb = InformixStreamDatabaseDriver.getInstance();
 			userDb = InformixUserDatabaseDriver.getInstance();

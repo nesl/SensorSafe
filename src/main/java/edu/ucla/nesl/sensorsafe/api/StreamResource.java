@@ -14,9 +14,14 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 
+import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
+import net.minidev.json.JSONValue;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.AnnotationIntrospector;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.module.jaxb.JaxbAnnotationIntrospector;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiResponse;
@@ -24,6 +29,7 @@ import com.wordnik.swagger.annotations.ApiResponses;
 
 import edu.ucla.nesl.sensorsafe.SensorSafeServletContext;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.model.Stream;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path("streams/{name}")
@@ -47,6 +53,8 @@ public class StreamResource {
     		db.addTuple(name, strTuple);
 		} catch (SQLException | ClassNotFoundException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
 		}
     	
     	return "Successfully added the tuple.";
@@ -66,11 +74,23 @@ public class StreamResource {
 		String ret = null;
 		try {
 			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-			JSONObject json = db.queryStream(name, startTime, endTime, expr);
+			
+			Stream stream = db.getStreamInfo(name);
+			JSONArray tuples = db.queryStream(name, startTime, endTime, expr);
+			
+			ObjectMapper mapper = new ObjectMapper();
+			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
+			mapper.setAnnotationIntrospector(introspector);
+			JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
+			
+			json.put("tuples", tuples);
 			ret = json.toString();
-		} catch (SQLException | JsonProcessingException | ClassNotFoundException e) {
+		} catch (SQLException | JsonProcessingException | ClassNotFoundException | UnsupportedOperationException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
 		}
+		
 		return ret;
 	}	
 
@@ -88,6 +108,8 @@ public class StreamResource {
 			db.deleteStream(name, startTime, endTime);
 		} catch (SQLException | ClassNotFoundException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
 		}
 		return "Succefully deleted stream (" + name + ") as requested.";
 	}	

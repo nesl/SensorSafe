@@ -39,4 +39,8 @@ public class WebExceptionBuilder {
 	public static WebApplicationException buildBadRequest(String msg) {
 		return new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).type(MediaType.TEXT_PLAIN).entity(msg).build());
 	}
+
+	public static WebApplicationException buildBadRequest(Exception e) {
+		return new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).type(MediaType.TEXT_PLAIN).entity(e.toString()).build());
+	}
 }

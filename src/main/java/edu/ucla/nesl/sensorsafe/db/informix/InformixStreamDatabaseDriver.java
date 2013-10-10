@@ -1,4 +1,4 @@
-package edu.ucla.nesl.sensorsafe.informix;
+package edu.ucla.nesl.sensorsafe.db.informix;
 
 import java.sql.Array;
 import java.sql.PreparedStatement;
@@ -12,24 +12,17 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.lang.StringUtils;
-
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import net.minidev.json.JSONValue;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.AnnotationIntrospector;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.module.jaxb.JaxbAnnotationIntrospector;
+import org.apache.commons.lang.StringUtils;
 
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.tools.Log;
-import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -238,11 +231,11 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 		// Check if tupleFormat is valid
 		if (!isChannelsValid(stream.channels))
-			throw WebExceptionBuilder.buildBadRequest("Invalid channel definition.");
+			throw new IllegalArgumentException("Invalid channel definition."); 
 
 		// Check if stream name exists.
 		if ( isStreamNameExist(stream.name) )
-			throw WebExceptionBuilder.buildBadRequest("Stream name (" + stream.name + ") already exists.");
+			throw new IllegalArgumentException("Stream name (" + stream.name + ") already exists.");
 
 		// Get new stream id number.
 		int id = getNewStreamId();
@@ -335,8 +328,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			String sql = "CREATE ROW TYPE IF NOT EXISTS " + rowTypeName + "("
 					+ "timestamp DATETIME YEAR TO FRACTION(5), "
 					+ channelSqlPart + ")";
-
-			Log.info(sql);
 
 			stmt.execute(sql);
 		} finally {
@@ -435,7 +426,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	public void addTuple(String name, String strTuple) throws SQLException {
 		// Check if stream name exists.
 		if ( !isStreamNameExist(name) )
-			throw WebExceptionBuilder.buildBadRequest("Stream name (" + name + ") does not exists.");
+			throw new IllegalArgumentException("Stream name (" + name + ") does not exists.");
 
 		PreparedStatement pstmt = null;
 
@@ -464,8 +455,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				+ "row('" + param.timestamp.toString() + "', " + param.values + ")::" + prefix + "rowtype) "
 				+ "WHERE id=?";
 
-		Log.info(sql);
-
 		PreparedStatement pstmt = null;
 		try {
 			pstmt = conn.prepareStatement(sql);
@@ -473,7 +462,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt.executeUpdate();
 		} catch (SQLException e) {
 			if (e.toString().contains("Extra characters at the end of a datetime or interval."))
-				throw WebExceptionBuilder.buildBadRequest(MSG_INVALID_TIMESTAMP_FORMAT);
+				throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
 			else if (e.toString().contains("No cast from ROW")) 
 				throwInvalidTupleFormat(prefix.split("_"));
 			else 
@@ -535,7 +524,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		try {
 			timestamp = Timestamp.valueOf((String)obj);
 		} catch (IllegalArgumentException | ClassCastException e) {
-			throw WebExceptionBuilder.buildBadRequest(MSG_INVALID_TIMESTAMP_FORMAT);
+			throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
 		}
 		return timestamp;
 	}
@@ -546,7 +535,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			tupleFormat += strFormat + ", ";
 		}
 		tupleFormat = tupleFormat.substring(0, tupleFormat.length() - 2) + " ]";
-		throw WebExceptionBuilder.buildBadRequest("Invalid tuple data type. Expected tuple format: " + tupleFormat);
+		throw new IllegalArgumentException("Invalid tuple data type. Expected tuple format: " + tupleFormat);
 	}
 
 	private String parseTuple(String[] format, int idx, Object obj) {
@@ -583,13 +572,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public JSONObject queryStream(String name, String startTime, String endTime, String expr) throws SQLException, JsonProcessingException {
+	public JSONArray queryStream(String name, String startTime, String endTime, String expr) throws SQLException {
 		// Check if stream name exists.
 		if ( !isStreamNameExist(name) )
-			throw WebExceptionBuilder.buildBadRequest("Stream name (" + name + ") does not exists.");
+			throw new IllegalArgumentException("Stream name (" + name + ") does not exists.");
 
 		PreparedStatement pstmt = null;
-		JSONObject json = null;
+		JSONArray tuples = null;
 		try {
 			Stream stream = getStreamInfo(name);
 			String prefix = getChannelFormatPrefix(stream.channels);
@@ -601,7 +590,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				if (endTime != null)
 					endTs = Timestamp.valueOf(endTime);
 			} catch (IllegalArgumentException e) {
-				throw WebExceptionBuilder.buildBadRequest(MSG_INVALID_TIMESTAMP_FORMAT);
+				throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
 			}
 
 			String sql = "SELECT * FROM " + prefix + "vtable "
@@ -619,8 +608,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
 
-			Log.info(sql);
-
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setInt(1, stream.id);
 			if (startTs != null)
@@ -629,14 +616,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				pstmt.setTimestamp(3, endTs);
 
 			ResultSet rset = pstmt.executeQuery();	
-
-			ObjectMapper mapper = new ObjectMapper();
-			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
-			mapper.setAnnotationIntrospector(introspector);
-			json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
-
-			JSONArray tuples = new JSONArray();
-
+			tuples = new JSONArray();
 			while (rset.next()) {
 				JSONArray curTuple = new JSONArray();
 				curTuple.add(rset.getTimestamp(2).toString());
@@ -649,20 +629,18 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					} else if (channel.type.equals("text")) {
 						curTuple.add(rset.getString(i));
 					} else {
-						throw WebExceptionBuilder.buildInternalServerError("Unsupported tuple format.");
+						throw new UnsupportedOperationException("Unsupported tuple format.");
 					}
 					i += 1;
 				}
 				tuples.add(curTuple);
 			}
-
-			json.put("tuples", tuples);
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
 		}
 
-		return json;
+		return tuples;
 	}
 
 	private String applyRules(String user, String oriSql, Stream stream) throws SQLException {
@@ -834,7 +812,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					if (endTime != null)
 						endTs = Timestamp.valueOf(endTime);
 				} catch (IllegalArgumentException e) {
-					throw WebExceptionBuilder.buildBadRequest(MSG_INVALID_TIMESTAMP_FORMAT);
+					throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
 				}
 
 				String strStartTs = null, strEndTs = null;
@@ -852,7 +830,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				pstmt.setInt(1, id);
 				pstmt.executeUpdate();
 			} else {
-				throw WebExceptionBuilder.buildBadRequest("Both the query parameters start_time and end_time or none of them should be provided.");
+				throw new IllegalArgumentException("Both the query parameters start_time and end_time or none of them should be provided.");
 			}
 		} finally {
 			if (pstmt != null)

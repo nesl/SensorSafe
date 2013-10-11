@@ -10,6 +10,7 @@ import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
+import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 
@@ -41,9 +42,9 @@ public class RuleCollectionResource {
 	public RuleCollection doGet() {
     	RuleCollection rules;
 		try {
-			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-			rules = db.getRules();
-		} catch (SQLException | ClassNotFoundException e) {
+			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			rules = db.getRules(httpReq.getRemoteUser());
+		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		}
     	
@@ -58,13 +59,13 @@ public class RuleCollectionResource {
     })
     public String doPost(@Valid Rule rule) {
     	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-    		db.storeRule(rule);
-		} catch (SQLException | ClassNotFoundException e) {
+    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+    		db.storeRule(httpReq.getRemoteUser(), rule);
+		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		}
     	
-    	return "Sucessfully added a new rule.";
+    	return "Sucessfully stored the rule.";
     }
     
     @DELETE
@@ -72,13 +73,16 @@ public class RuleCollectionResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-    public String doDelete() {
+    public String doDelete(@QueryParam("id") int id) {
     	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-    		db.deleteAllRules();
-		} catch (SQLException | ClassNotFoundException e) {
+    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+    		if (id != 0) 
+    			db.deleteRule(httpReq.getRemoteUser(), id);
+    		else 
+    			db.deleteAllRules(httpReq.getRemoteUser());
+		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		}
-    	return "Successfully deleted all rules.";
+    	return "Successfully deleted rule(s).";
     }
 }

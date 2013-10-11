@@ -4,7 +4,6 @@ import java.sql.SQLException;
 import java.util.List;
 
 import net.minidev.json.JSONArray;
-import net.minidev.json.JSONObject;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 
@@ -14,36 +13,37 @@ import edu.ucla.nesl.sensorsafe.model.Stream;
 
 public interface StreamDatabaseDriver extends DatabaseDriver {
 	
-	public RuleCollection getRules() 
+	public RuleCollection getRules(String owner) 
 			throws SQLException;
 	
-	public void storeRule(Rule rule) 
+	public void storeRule(String owner, Rule rule) 
 			throws SQLException;
 	
-	public void deleteAllRules() 
+	public void deleteAllRules(String owner) 
 			throws SQLException;
 	
-	public void createStream(Stream stream) 
+	public void createStream(String owner, Stream stream) 
 			throws SQLException, ClassNotFoundException;
 	
-	public void addTuple(String name, String strTuple) 
+	public void addTuple(String owner, String streamName, String strTuple) 
 			throws SQLException;
 	
-	public JSONArray queryStream(String name, String startTime, String endTime, String expr) 
+	public JSONArray queryStream(String owner, String streamName, String startTime, String endTime, String expr) 
 			throws SQLException, JsonProcessingException;
 	
-	public Stream getStreamInfo(String name) 
+	public Stream getStreamInfo(String owner, String name) 
 			throws SQLException;
 	
-	public List<Stream> getStreamList() 
+	public List<Stream> getStreamList(String owner) 
 			throws SQLException;
 
-	public void deleteStream(String name, String startTime, String endTime)
+	public void deleteStream(String owner, String streamName, String startTime, String endTime)
 			throws SQLException;
 	
-	public void deleteAllStreams() 
+	public void deleteAllStreams(String owner) 
 			throws SQLException;
 
-	public void setCurrentUser(String username);
-	
+	public void clean() throws SQLException, ClassNotFoundException;
+
+	public void deleteRule(String remoteUser, int id) throws SQLException;
 }

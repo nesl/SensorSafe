@@ -42,10 +42,10 @@ public class StreamCollectionResource {
     public StreamCollection doGet() {    	
     	StreamCollection streamCollection;
     	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-			List<Stream> streams = db.getStreamList();
+    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			List<Stream> streams = db.getStreamList(httpReq.getRemoteUser());
 			streamCollection = new StreamCollection(streams);
-		} catch (SQLException | ClassNotFoundException e) {
+		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		}
     	return streamCollection;
@@ -59,8 +59,8 @@ public class StreamCollectionResource {
     })
     public String doPost(@Valid Stream stream) {
     	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-			db.createStream(stream);
+    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			db.createStream(httpReq.getRemoteUser(), stream);
 		} catch (SQLException | ClassNotFoundException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
@@ -77,9 +77,9 @@ public class StreamCollectionResource {
     })
     public String doDelete() {
     	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-			db.deleteAllStreams();
-		} catch (SQLException | ClassNotFoundException e) {
+    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			db.deleteAllStreams(httpReq.getRemoteUser());
+		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		}
     	return "Successfully deleted all streams.";

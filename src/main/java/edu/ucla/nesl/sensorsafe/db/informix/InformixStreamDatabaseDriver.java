@@ -23,6 +23,7 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -44,6 +45,42 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
+	public void clean() throws SQLException, ClassNotFoundException {
+		Statement stmt1 = null;
+		Statement stmt2 = null;
+
+		try {
+			stmt1 = conn.createStatement();
+			ResultSet rset = stmt1.executeQuery("SELECT 1 FROM systables WHERE tabname='streams';");
+			if (rset.next()) {
+				stmt1.close();
+				stmt1 = conn.createStatement();
+				rset = stmt1.executeQuery("SELECT channels FROM streams;");
+				while (rset.next()) {
+					stmt2 = conn.createStatement();
+					String prefix = getChannelFormatPrefix(getListChannelFromSqlArray(rset.getArray(1)));
+					stmt2.execute("DROP TABLE IF EXISTS " + prefix + "vtable");
+					stmt2.execute("DROP TABLE IF EXISTS " + prefix + "streams");
+					stmt2.execute("DROP ROW TYPE IF EXISTS " + prefix + "rowtype RESTRICT");
+				}
+			}
+			stmt1.close();
+			stmt1 = conn.createStatement();
+			stmt1.execute("DROP TABLE IF EXISTS streams;");
+			stmt1.execute("DROP TABLE IF EXISTS rules;");
+			stmt1.execute("DELETE FROM CalendarPatterns WHERE cp_name = 'every_sec';");
+			stmt1.execute("DELETE FROM CalendarTable WHERE c_name = 'sec_cal';");
+			
+			initializeDatabase();
+		} finally {
+			if (stmt1 != null) 
+				stmt1.close();
+			if (stmt2 != null) 
+				stmt2.close();
+		}
+	}
+
+	@Override
 	protected void initializeDatabase() throws SQLException, ClassNotFoundException {
 		PreparedStatement pstmt = null;
 		try {
@@ -54,6 +91,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			ResultSet rset = pstmt.executeQuery();
 			if (!rset.next())
 				initializeTables();
+			
 			// Add type map information
 			Map<String, Class<?>> typeMap = conn.getTypeMap();
 			typeMap.put("calendarpattern", Class.forName("com.informix.timeseries.IfmxCalendarPattern"));
@@ -69,53 +107,32 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	private void initializeTables() throws SQLException, ClassNotFoundException {
 
 		Statement stmt = null;
-		Statement stmt2 = null;
 		try {
 			stmt = conn.createStatement();
-			stmt2 = conn.createStatement();
-
-			// clean up
-			ResultSet rset = stmt.executeQuery("SELECT 1 FROM systables WHERE tabname='streams';");
-			if (rset.next()) {
-				stmt.close();
-				stmt = conn.createStatement();
-				rset = stmt.executeQuery("SELECT channels FROM streams;");
-				while (rset.next()) {
-					String prefix = getChannelFormatPrefix(getListChannelFromSqlArray(rset.getArray(1)));
-					stmt2.execute("DROP TABLE IF EXISTS " + prefix + "vtable");
-					stmt2.execute("DROP TABLE IF EXISTS " + prefix + "streams");
-					stmt2.execute("DROP ROW TYPE IF EXISTS " + prefix + "rowtype RESTRICT");
-				}
-				if (stmt != null)
-					stmt.close();
-			}
-
-			stmt = conn.createStatement();
-			stmt.execute("DROP TABLE IF EXISTS streams;");
-			stmt.execute("DROP TABLE IF EXISTS rules;");
-
-			stmt.execute("DELETE FROM CalendarPatterns WHERE cp_name = 'every_sec';");
-			stmt.execute("DELETE FROM CalendarTable WHERE c_name = 'sec_cal';");
 
 			// calendars
+			stmt.execute("DELETE FROM CalendarPatterns WHERE cp_name = 'every_sec';");
+			stmt.execute("DELETE FROM CalendarTable WHERE c_name = 'sec_cal';");
 			stmt.execute("INSERT INTO CalendarPatterns VALUES('every_sec', '{1 on}, second');");
 			stmt.execute("INSERT INTO CalendarTable(c_name, c_calendar) VALUES ('sec_cal', 'startdate(1753-01-01 00:00:00.00000), pattname(every_sec)');");
 
-			// row types
-			stmt.execute("DROP ROW TYPE IF EXISTS name_type RESTRICT");
-
 			// tables
 			stmt.execute("CREATE TABLE streams ("
-					+ "id BIGINT NOT NULL PRIMARY KEY, "
-					+ "name VARCHAR(255) UNIQUE CONSTRAINT name, "
+					+ "id SERIAL PRIMARY KEY NOT NULL, "
+					+ "owner VARCHAR(100) NOT NULL, "
+					+ "name VARCHAR(100) NOT NULL, "
 					+ "tags VARCHAR(255), "
-					+ "channels LIST(ROW(name VARCHAR(255), type VARCHAR(255)) NOT NULL));");
+					+ "channels LIST(ROW(name VARCHAR(100),type VARCHAR(100)) NOT NULL), "
+					+ "UNIQUE (owner, name) CONSTRAINT owner_stream_name);");
 
-			stmt.execute("CREATE TABLE rules ("
-					+ "target_users SET(VARCHAR(255) NOT NULL), "
-					+ "target_streams SET(VARCHAR(255) NOT NULL), "
-					+ "condition VARCHAR(255) NOT NULL, "
-					+ "action VARCHAR(255) NOT NULL);");
+			String sql = "CREATE TABLE rules ("
+					+ "id SERIAL PRIMARY KEY NOT NULL, "
+					+ "owner VARCHAR(100) NOT NULL, "
+					+ "target_users SET(VARCHAR(100) NOT NULL), "
+					+ "target_streams SET(VARCHAR(100) NOT NULL), "
+					+ "condition VARCHAR(255), "
+					+ "action VARCHAR(255) NOT NULL);";
+			stmt.execute(sql);
 
 			// Test
 			/*stmt.executeUpdate("INSERT INTO streams VALUES (1, 'test', 'tags', LIST{ROW('acc_x', 'float'), ROW('acc_y', 'float')});");
@@ -157,20 +174,22 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public RuleCollection getRules() throws SQLException {
+	public RuleCollection getRules(String owner) throws SQLException {
 		PreparedStatement pstmt = null;
 		RuleCollection rules = new RuleCollection();
 		try {
-			String sql = "SELECT * FROM rules";
+			String sql = "SELECT id, target_users, target_streams, condition, action FROM rules WHERE owner = ?";
 			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, owner);
 			ResultSet rset = pstmt.executeQuery();
 			rules.rules = new LinkedList<Rule>();
 			while (rset.next()) {
-				Array sqlArr = rset.getArray(1);
+				int id = rset.getInt(1);
+				Array sqlArr = rset.getArray(2);
 				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
-				sqlArr = rset.getArray(2);
+				sqlArr = rset.getArray(3);
 				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
-				rules.rules.add(new Rule(targetUsers, targetStreams, rset.getString(3), rset.getString(4)));
+				rules.rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5)));
 			}
 		} finally {
 			if (pstmt != null)
@@ -180,7 +199,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public void storeRule(Rule rule) throws SQLException {
+	public void storeRule(String owner, Rule rule) throws SQLException {
 		PreparedStatement pstmt = null;
 		String targetUsers = null;
 		if (rule.targetUsers != null) {
@@ -200,13 +219,34 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			targetStreams = targetStreams.substring(0, targetStreams.length() - 2);
 			targetStreams += "}";
 		}
-		try {			
-			String sql = "INSERT INTO rules VALUES (?,?,?,?)";
+		try {
+			String sql;
+			if (rule.id == 0) {
+				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action) VALUES (?,?,?,?,?)";
+			} else {
+				pstmt = conn.prepareStatement("SELECT 1 FROM rules WHERE id = ?");
+				pstmt.setInt(1, rule.id);
+				ResultSet rset = pstmt.executeQuery();
+				if (rset.next()) {
+					sql = "UPDATE rules SET owner = ?, "
+							+ "target_users = ?, "
+							+ "target_streams = ?, "
+							+ "condition = ?, "
+							+ "action = ? WHERE id = ?";
+				} else {
+					sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, id) VALUES (?,?,?,?,?,?)";
+				}
+			}
+			if (pstmt != null)
+				pstmt.close();
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, targetUsers);
-			pstmt.setString(2, targetStreams);
-			pstmt.setString(3, rule.condition);
-			pstmt.setString(4, rule.action);
+			pstmt.setString(1, owner);
+			pstmt.setString(2, targetUsers);
+			pstmt.setString(3, targetStreams);
+			pstmt.setString(4, rule.condition);
+			pstmt.setString(5, rule.action);
+			if (rule.id != 0)
+				pstmt.setInt(6, rule.id);
 			pstmt.executeUpdate();
 		} finally {
 			if (pstmt != null) 
@@ -215,30 +255,45 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public void deleteAllRules() throws SQLException {
-		Statement stmt = null;
+	public void deleteAllRules(String owner) throws SQLException {
+		PreparedStatement pstmt = null;
 		try {
-			stmt = conn.createStatement();
-			stmt.execute("DELETE FROM rules");
+			pstmt = conn.prepareStatement("DELETE FROM rules WHERE owner = ?");
+			pstmt.setString(1, owner);
+			pstmt.executeUpdate();
 		} finally {
-			if (stmt != null)
-				stmt.close();
+			if (pstmt != null)
+				pstmt.close();
 		}
 	}
 
 	@Override
-	public void createStream(Stream stream) throws SQLException, ClassNotFoundException {
+	public void deleteRule(String owner, int id) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			pstmt = conn.prepareStatement("DELETE FROM rules WHERE owner = ? AND id = ?");
+			pstmt.setString(1, owner);
+			pstmt.setInt(2, id);
+			pstmt.executeUpdate();
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+	}
+
+	@Override
+	public void createStream(String owner, Stream stream) throws SQLException, ClassNotFoundException {
 
 		// Check if tupleFormat is valid
 		if (!isChannelsValid(stream.channels))
 			throw new IllegalArgumentException("Invalid channel definition."); 
 
 		// Check if stream name exists.
-		if ( isStreamNameExist(stream.name) )
+		if ( isStreamNameExist(owner, stream.name) )
 			throw new IllegalArgumentException("Stream name (" + stream.name + ") already exists.");
 
 		// Get new stream id number.
-		int id = getNewStreamId();
+		//int id = getNewStreamId();
 
 		// Create row type if not exists.
 		executeSqlCreateRowType(stream.channels);
@@ -255,10 +310,10 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		executeSqlCreateStreamTable(stream.channels);
 
 		// Insert into streams table
-		executeSqlInsertIntoStreamTable(id, stream);
+		int newStreamId = executeSqlInsertIntoStreamTable(owner, stream);
 
 		// Insert into timeseries streams table
-		executeSqlInsertIntoTimeseriesTable(id, stream.channels);
+		executeSqlInsertIntoTimeseriesTable(newStreamId, stream.channels);
 
 		// Create a virtual table.
 		executeSqlCreateVirtualTable(stream);
@@ -275,12 +330,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		return true;
 	}
 
-	private boolean isStreamNameExist(String newStreamName) throws SQLException {
+	private boolean isStreamNameExist(String owner, String streamName) throws SQLException {
 		PreparedStatement pstmt = null;
 		try {
-			String sql = "SELECT COUNT(name) FROM streams WHERE name=?;";
+			String sql = "SELECT COUNT(name) FROM streams WHERE owner = ? AND name = ?;";
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, newStreamName);
+			pstmt.setString(1, owner);
+			pstmt.setString(2, streamName);
 			ResultSet rSet = pstmt.executeQuery();
 			rSet.next();
 			if ( rSet.getInt(1) > 0 )
@@ -293,7 +349,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		return false;
 	}
 
-	private int getNewStreamId() throws SQLException {
+	/*private int getNewStreamId() throws SQLException {
 		Statement stmt = null;
 		try {
 			stmt = conn.createStatement();
@@ -305,7 +361,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			if (stmt != null)
 				stmt.close();
 		}
-	}
+	}*/
 
 	private void executeSqlCreateRowType(List<Channel> channels) throws SQLException {
 		Statement stmt = null;
@@ -360,15 +416,24 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		return prefix + "streams";
 	}
 
-	private void executeSqlInsertIntoStreamTable(int id, Stream stream) throws SQLException {
+	private int executeSqlInsertIntoStreamTable(String owner, Stream stream) throws SQLException {
 		PreparedStatement pstmt = null;
 		try {
-			pstmt = conn.prepareStatement("INSERT INTO streams VALUES (?,?,?,?)");
-			pstmt.setInt(1, id);
+			pstmt = conn.prepareStatement("INSERT INTO streams (owner, name, tags, channels) VALUES (?,?,?,?)");
+			pstmt.setString(1, owner);
 			pstmt.setString(2, stream.name);
 			pstmt.setString(3, stream.tags);
 			pstmt.setString(4, getChannelsSqlDataString(stream.channels));
-			pstmt.executeUpdate(); 
+			pstmt.executeUpdate();
+			pstmt.close();
+			
+			pstmt = conn.prepareStatement("SELECT id FROM streams WHERE owner=? AND name=?");
+			pstmt.setString(1, owner);
+			pstmt.setString(2, stream.name);
+			ResultSet rset = pstmt.executeQuery();
+			rset.next();
+			
+			return rset.getInt(1);
 		} finally {
 			if (pstmt != null) 
 				pstmt.close();
@@ -386,15 +451,14 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		return ret;
 	}
 
-	private void executeSqlInsertIntoTimeseriesTable(int id, List<Channel> channels) throws SQLException {
+	private void executeSqlInsertIntoTimeseriesTable(int newStreamId, List<Channel> channels) throws SQLException {
 		PreparedStatement pstmt = null;
-
 		try {
 			String table = getTableName(channels);
 			String sql = "INSERT INTO " + table + " VALUES (?, "
 					+ "'origin(" + ORIGIN_TIMESTAMP + "),calendar(sec_cal),threshold(0),irregular,[]');";
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setInt(1, id);
+			pstmt.setInt(1, newStreamId);
 			pstmt.executeUpdate();
 		} finally {
 			if (pstmt != null)
@@ -403,37 +467,42 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	private void executeSqlCreateVirtualTable(Stream stream) throws SQLException {
-		Statement stmt = null;
+		PreparedStatement pstmt = null;
 
 		try {
-			stmt = conn.createStatement();
 			String prefix = getChannelFormatPrefix(stream.channels);
 			String vtableName = prefix + "vtable";
-			String sTableName = prefix + "streams";
-			try {
-				stmt.execute("EXECUTE PROCEDURE TSCreateVirtualTAB('" + vtableName + "', '" + sTableName + "')");
-			} catch (SQLException e) {
-				if (!e.toString().contains("already exists in database."))
-					throw e;
+			
+			pstmt = conn.prepareStatement("SELECT 1 FROM systables WHERE tabname=?");
+			pstmt.setString(1, vtableName);
+			ResultSet rset = pstmt.executeQuery();
+			if (!rset.next()) {
+				pstmt.close();
+				String stableName = prefix + "streams";
+				pstmt = conn.prepareStatement("EXECUTE PROCEDURE TSCreateVirtualTAB(?, ?)");
+				pstmt.setString(1, vtableName);
+				pstmt.setString(2, stableName);
+				pstmt.execute();
 			}
 		} finally {
-			if (stmt != null)
-				stmt.close();
+			if (pstmt != null)
+				pstmt.close();
 		}
 	}
 
 	@Override
-	public void addTuple(String name, String strTuple) throws SQLException {
+	public void addTuple(String owner, String streamName, String strTuple) throws SQLException {
 		// Check if stream name exists.
-		if ( !isStreamNameExist(name) )
-			throw new IllegalArgumentException("Stream name (" + name + ") does not exists.");
+		if ( !isStreamNameExist(owner, streamName) )
+			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
 
 		PreparedStatement pstmt = null;
 
 		try {
-			String sql = "SELECT channels, id FROM streams WHERE name=?";
+			String sql = "SELECT channels, id FROM streams WHERE owner=? AND name=?";
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, name);
+			pstmt.setString(1, owner);
+			pstmt.setString(2, streamName);
 			ResultSet rset = pstmt.executeQuery();
 			rset.next();
 			String prefix = getChannelFormatPrefix(getListChannelFromSqlArray(rset.getArray(1)));
@@ -572,15 +641,15 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public JSONArray queryStream(String name, String startTime, String endTime, String expr) throws SQLException {
+	public JSONArray queryStream(String owner, String streamName, String startTime, String endTime, String expr) throws SQLException {
 		// Check if stream name exists.
-		if ( !isStreamNameExist(name) )
-			throw new IllegalArgumentException("Stream name (" + name + ") does not exists.");
+		if ( !isStreamNameExist(owner, streamName) )
+			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
 
 		PreparedStatement pstmt = null;
 		JSONArray tuples = null;
 		try {
-			Stream stream = getStreamInfo(name);
+			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
 
 			Timestamp startTs = null, endTs = null;
@@ -594,7 +663,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			}
 
 			String sql = "SELECT * FROM " + prefix + "vtable "
-					+ "WHERE id=?";
+					+ "WHERE id = ?";
 
 			if (startTs != null) 
 				sql += " AND timestamp>=?";
@@ -609,18 +678,24 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			sql = convertChannelNames(stream.channels, sql);
 
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setInt(1, stream.id);
-			if (startTs != null)
-				pstmt.setTimestamp(2, startTs);
-			if (endTs != null)
-				pstmt.setTimestamp(3, endTs);
+			int i = 1;
+			pstmt.setInt(i, stream.id);
+			i += 1;
+			if (startTs != null) {
+				pstmt.setTimestamp(i, startTs);
+				i += 1;
+			}
+			if (endTs != null) {
+				pstmt.setTimestamp(i, endTs);
+				i += 1;
+			}
 
 			ResultSet rset = pstmt.executeQuery();	
 			tuples = new JSONArray();
 			while (rset.next()) {
 				JSONArray curTuple = new JSONArray();
 				curTuple.add(rset.getTimestamp(2).toString());
-				int i = 3;
+				i = 3;
 				for (Channel channel: stream.channels) {
 					if (channel.type.equals("float")) {
 						curTuple.add(rset.getDouble(i));
@@ -731,13 +806,16 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public Stream getStreamInfo(String name) throws SQLException {
+	public Stream getStreamInfo(String owner, String name) throws SQLException {
 		PreparedStatement pstmt = null;
 		Stream stream = null;
 		try {
-			String sql = "SELECT tags, channels, id FROM streams WHERE name=?";
+			String sql = "SELECT tags, channels, id FROM streams WHERE owner = ? AND name = ?";
+			Log.info(sql);
+			Log.info(owner + ", " + name);
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, name);
+			pstmt.setString(1, owner);
+			pstmt.setString(2, name);
 			ResultSet rset = pstmt.executeQuery();
 			rset.next();
 			String tags = rset.getString(1);
@@ -753,34 +831,36 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public List<Stream> getStreamList() throws SQLException {
+	public List<Stream> getStreamList(String owner) throws SQLException {
 		List<Stream> streams;
-		Statement stmt = null;
+		PreparedStatement pstmt = null;
 
 		try {
-			stmt = conn.createStatement();
-			ResultSet rSet = stmt.executeQuery("SELECT id, name, tags, channels FROM streams");
+			pstmt = conn.prepareStatement("SELECT id, name, tags, channels FROM streams WHERE owner = ?");
+			pstmt.setString(1, owner);
+			ResultSet rSet = pstmt.executeQuery();
 			streams = new LinkedList<Stream>();
 			while (rSet.next()) {
 				streams.add(new Stream(rSet.getInt(1), rSet.getString(2), rSet.getString(3), getListChannelFromSqlArray(rSet.getArray(4)))); 
 			}
 		} finally {
-			if (stmt != null)
-				stmt.close();
+			if (pstmt != null)
+				pstmt.close();
 		}
 
 		return streams;
 	}
 
 	@Override
-	public void deleteStream(String name, String startTime, String endTime) throws SQLException {
+	public void deleteStream(String owner, String streamName, String startTime, String endTime) throws SQLException {
 		PreparedStatement pstmt = null;
 
 		try {
 			// Get stream information.
-			String sql = "SELECT id, channels FROM streams WHERE name=?";
+			String sql = "SELECT id, channels FROM streams WHERE owner = ? AND name = ?";
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, name);
+			pstmt.setString(1, owner);
+			pstmt.setString(2, streamName);
 			ResultSet rset = pstmt.executeQuery();
 			rset.next();
 			int id = rset.getInt(1);
@@ -792,14 +872,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 			// Delete a stream.
 			if (startTime == null && endTime == null) {
-				sql = "DELETE FROM streams WHERE id=?";
+				sql = "DELETE FROM streams WHERE id = ?";
 				pstmt = conn.prepareStatement(sql);
 				pstmt.setInt(1, id);
 				pstmt.executeUpdate();
-
-				if (pstmt != null)
-					pstmt.close();
-				sql = "DELETE FROM " + prefix + "_streams WHERE id=?";
+				pstmt.close();
+				
+				sql = "DELETE FROM " + prefix + "streams WHERE id = ?";
 				pstmt = conn.prepareStatement(sql);
 				pstmt.executeUpdate();
 
@@ -825,7 +904,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 				sql = "UPDATE " + prefix + "streams SET tuples = "
 						+ "DelRange(tuples, " + strStartTs + ", " + strEndTs + ") "
-						+ "WHERE id=?";
+						+ "WHERE id = ?";
 				pstmt = conn.prepareStatement(sql);
 				pstmt.setInt(1, id);
 				pstmt.executeUpdate();
@@ -839,29 +918,31 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public void deleteAllStreams() throws SQLException {
-		Statement stmt = null;
-		Statement stmt2 = null;
+	public void deleteAllStreams(String owner) throws SQLException {
+		PreparedStatement pstmt = null;
+		PreparedStatement pstmt2 = null;
 		try {
-			stmt = conn.createStatement();
-			stmt2 = conn.createStatement();
-			ResultSet rset = stmt.executeQuery("SELECT channels FROM streams");
+			pstmt = conn.prepareStatement("SELECT id, channels FROM streams WHERE owner = ?");
+			pstmt.setString(1, owner);
+			ResultSet rset = pstmt.executeQuery();
 			while (rset.next()) {
-				String prefix = getChannelFormatPrefix(getListChannelFromSqlArray(rset.getArray(1)));
-				stmt2.execute("DROP TABLE IF EXISTS " + prefix + "vtable");
-				stmt2.execute("DROP TABLE IF EXISTS " + prefix + "streams");
+				int id = rset.getInt(1);
+				String prefix = getChannelFormatPrefix(getListChannelFromSqlArray(rset.getArray(2)));
+				String sql = "DELETE FROM " + prefix + "streams WHERE id = ?";
+				pstmt2 = conn.prepareStatement(sql);
+				pstmt2.setInt(1, id);
+				pstmt2.executeUpdate();
 			}
-			stmt2.execute("DELETE FROM streams");
+			pstmt.close();
+			pstmt = conn.prepareStatement("DELETE FROM streams WHERE owner = ?");
+			pstmt.setString(1, owner);
+			pstmt.execute();
 		} finally {
-			if (stmt != null)
-				stmt.close();
-			if (stmt2 != null)
-				stmt.close();
+			if (pstmt != null)
+				pstmt.close();
+			if (pstmt2 != null)
+				pstmt.close();
 		}
 	}
 
-	@Override
-	public void setCurrentUser(String username) {
-		// TODO
-	}
 }

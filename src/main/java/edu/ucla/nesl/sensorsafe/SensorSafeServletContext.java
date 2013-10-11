@@ -16,12 +16,6 @@ public class SensorSafeServletContext implements ServletContextListener {
 	private static StreamDatabaseDriver streamDb;
 	private static UserDatabaseDriver userDb;
 	
-	public static StreamDatabaseDriver getStreamDatabase(String username) throws ClassNotFoundException, SQLException {
-		if (streamDb != null)
-			streamDb.setCurrentUser(username);
-		return streamDb;
-	}
-
 	public static StreamDatabaseDriver getStreamDatabase() {
 		return streamDb;
 	}

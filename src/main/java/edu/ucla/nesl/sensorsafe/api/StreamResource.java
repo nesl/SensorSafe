@@ -30,11 +30,12 @@ import com.wordnik.swagger.annotations.ApiResponses;
 import edu.ucla.nesl.sensorsafe.SensorSafeServletContext;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
-@Path("streams/{name}")
+@Path("/streams/{stream_name}")
 @Produces(MediaType.TEXT_PLAIN)
-@Api(value = "streams/{name}", description = "Operation about an individual stream.")
+@Api(value = "/streams/{stream_name}", description = "Operation about an individual stream.")
 public class StreamResource {
 	
 	@Context 
@@ -47,11 +48,11 @@ public class StreamResource {
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Interval Server Error")
 	})
-	public String doPost(@PathParam("name") String name, String strTuple) {
+	public String doPost(@PathParam("stream_name") String streamName, String strTuple) {
     	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-    		db.addTuple(name, strTuple);
-		} catch (SQLException | ClassNotFoundException e) {
+    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+    		db.addTuple(httpReq.getRemoteUser(), streamName, strTuple);
+		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
 			throw WebExceptionBuilder.buildBadRequest(e);
@@ -66,17 +67,19 @@ public class StreamResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-	public String doGet(@PathParam("name") String name, 
+	public String doGet(@PathParam("stream_name") String streamName, 
 			@QueryParam("start_time") String startTime, 
 			@QueryParam("end_time") String endTime, 
 			@QueryParam("expr") String expr) {
 		
 		String ret = null;
 		try {
-			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
+			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
 			
-			Stream stream = db.getStreamInfo(name);
-			JSONArray tuples = db.queryStream(name, startTime, endTime, expr);
+			Log.info(streamName);
+			
+			Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
+			JSONArray tuples = db.queryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, expr);
 			
 			ObjectMapper mapper = new ObjectMapper();
 			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
@@ -85,7 +88,7 @@ public class StreamResource {
 			
 			json.put("tuples", tuples);
 			ret = json.toString();
-		} catch (SQLException | JsonProcessingException | ClassNotFoundException | UnsupportedOperationException e) {
+		} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
 			throw WebExceptionBuilder.buildBadRequest(e);
@@ -99,18 +102,18 @@ public class StreamResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-	public String doDelete(@PathParam("name") String name,
+	public String doDelete(@PathParam("stream_name") String streamName,
 			@QueryParam("start_time") String startTime, 
 			@QueryParam("end_time") String endTime) {
 
     	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase(httpReq.getRemoteUser());
-			db.deleteStream(name, startTime, endTime);
-		} catch (SQLException | ClassNotFoundException e) {
+    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			db.deleteStream(httpReq.getRemoteUser(), streamName, startTime, endTime);
+		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
 			throw WebExceptionBuilder.buildBadRequest(e);
 		}
-		return "Succefully deleted stream (" + name + ") as requested.";
+		return "Succefully deleted stream (" + streamName + ") as requested.";
 	}	
 }

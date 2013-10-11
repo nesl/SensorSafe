@@ -1,5 +1,6 @@
 package edu.ucla.nesl.sensorsafe.api;
 
+import java.io.IOException;
 import java.sql.SQLException;
 
 import javax.servlet.http.HttpServletRequest;
@@ -29,6 +30,7 @@ import com.wordnik.swagger.annotations.ApiResponses;
 
 import edu.ucla.nesl.sensorsafe.SensorSafeServletContext;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.model.Stream;
 import edu.ucla.nesl.sensorsafe.tools.Log;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
@@ -37,9 +39,29 @@ import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 @Produces(MediaType.TEXT_PLAIN)
 @Api(value = "/streams/{stream_name}", description = "Operation about an individual stream.")
 public class StreamResource {
-	
+
 	@Context 
 	private HttpServletRequest httpReq;
+
+	@POST
+	@Produces(MediaType.APPLICATION_JSON)
+	@Consumes(MediaType.APPLICATION_OCTET_STREAM)
+	@ApiOperation(value = "Bulkload tuples to a stream.", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Interval Server Error")
+	})
+	@Path("/bulkload")
+	public ResponseMsg doBulkLoadPost(@PathParam("stream_name") String streamName, String data) {
+		
+		try {
+			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			db.bulkLoad(httpReq.getRemoteUser(), streamName, data);
+		} catch (SQLException | IOException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		}
+		
+		return new ResponseMsg("Successfully completed bulkloading.");
+	}
 
 	@POST
 	@Produces(MediaType.TEXT_PLAIN)
@@ -49,43 +71,41 @@ public class StreamResource {
 			@ApiResponse(code = 500, message = "Interval Server Error")
 	})
 	public String doPost(@PathParam("stream_name") String streamName, String strTuple) {
-    	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
-    		db.addTuple(httpReq.getRemoteUser(), streamName, strTuple);
+		try {
+			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			db.addTuple(httpReq.getRemoteUser(), streamName, strTuple);
 		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
 			throw WebExceptionBuilder.buildBadRequest(e);
 		}
-    	
-    	return "Successfully added the tuple.";
+
+		return "Successfully added the tuple.";
 	}
-	
+
 	@GET
-    @Produces(MediaType.APPLICATION_JSON)
-    @ApiOperation(value = "Retrieve the stream.", notes = "TBD")
-    @ApiResponses(value = {
-    		@ApiResponse(code = 500, message = "Internal Server Error")
-    })
+	@Produces(MediaType.APPLICATION_JSON)
+	@ApiOperation(value = "Retrieve the stream.", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
 	public String doGet(@PathParam("stream_name") String streamName, 
 			@QueryParam("start_time") String startTime, 
 			@QueryParam("end_time") String endTime, 
 			@QueryParam("expr") String expr) {
-		
+
 		String ret = null;
 		try {
 			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
-			
-			Log.info(streamName);
-			
+
 			Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
 			JSONArray tuples = db.queryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, expr);
-			
+
 			ObjectMapper mapper = new ObjectMapper();
 			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
 			mapper.setAnnotationIntrospector(introspector);
 			JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
-			
+
 			json.put("tuples", tuples);
 			ret = json.toString();
 		} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
@@ -93,21 +113,21 @@ public class StreamResource {
 		} catch (IllegalArgumentException e) {
 			throw WebExceptionBuilder.buildBadRequest(e);
 		}
-		
+
 		return ret;
 	}	
 
 	@DELETE
-    @ApiOperation(value = "Delete a stream.", notes = "TBD")
-    @ApiResponses(value = {
-    		@ApiResponse(code = 500, message = "Internal Server Error")
-    })
+	@ApiOperation(value = "Delete a stream.", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
 	public String doDelete(@PathParam("stream_name") String streamName,
 			@QueryParam("start_time") String startTime, 
 			@QueryParam("end_time") String endTime) {
 
-    	try {
-    		StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+		try {
+			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
 			db.deleteStream(httpReq.getRemoteUser(), streamName, startTime, endTime);
 		} catch (SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);

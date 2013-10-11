@@ -1,5 +1,9 @@
 package edu.ucla.nesl.sensorsafe.db.informix;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.Array;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -23,13 +27,14 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
 	private static final String ORIGIN_TIMESTAMP = "2000-01-01 00:00:00.00000";
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
+
+	private static String BULK_LOAD_DATA_FILE_NAME = "tmp/bulkload_data";
 
 	private static InformixStreamDatabaseDriver instance;
 
@@ -811,8 +816,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		Stream stream = null;
 		try {
 			String sql = "SELECT tags, channels, id FROM streams WHERE owner = ? AND name = ?";
-			Log.info(sql);
-			Log.info(owner + ", " + name);
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, owner);
 			pstmt.setString(2, name);
@@ -942,6 +945,37 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				pstmt.close();
 			if (pstmt2 != null)
 				pstmt.close();
+		}
+	}
+
+	@Override
+	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException {
+		PreparedStatement pstmt = null;
+		FileWriter fw = null;
+		BufferedWriter bw = null;
+		try {
+			File file = new File(BULK_LOAD_DATA_FILE_NAME);
+			if (file.exists()) {
+				file.delete();				
+			}
+			file.createNewFile();
+			fw = new FileWriter(file.getAbsoluteFile());
+			bw = new BufferedWriter(fw);
+			bw.write(data);
+			bw.close();
+		
+			Stream stream = getStreamInfo(owner, streamName);
+			String prefix = getChannelFormatPrefix(stream.channels);
+			pstmt = conn.prepareStatement("UPDATE " + prefix + "streams SET tuples = BulkLoad(tuples, ?)");
+			pstmt.setString(1, file.getAbsolutePath());
+			pstmt.executeUpdate();
+		} finally {
+			if (pstmt != null) 
+				pstmt.close();
+			if (fw != null)
+				fw.close();
+			if (bw != null)
+				bw.close();
 		}
 	}
 

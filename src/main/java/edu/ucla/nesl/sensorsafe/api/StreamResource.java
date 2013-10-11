@@ -1,6 +1,7 @@
 package edu.ucla.nesl.sensorsafe.api;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.sql.SQLException;
 
 import javax.servlet.http.HttpServletRequest;
@@ -12,12 +13,16 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.StreamingOutput;
 
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import net.minidev.json.JSONValue;
+
+import org.apache.commons.io.IOUtils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.AnnotationIntrospector;
@@ -89,32 +94,51 @@ public class StreamResource {
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public String doGet(@PathParam("stream_name") String streamName, 
-			@QueryParam("start_time") String startTime, 
-			@QueryParam("end_time") String endTime, 
-			@QueryParam("expr") String expr) {
+	public StreamingOutput doGet(@PathParam("stream_name") final String streamName, 
+			@QueryParam("start_time") final String startTime, 
+			@QueryParam("end_time") final String endTime, 
+			@QueryParam("expr") final String expr,
+			@QueryParam("limit") final int limit,
+			@QueryParam("offset") final int offset) {
 
-		String ret = null;
-		try {
-			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+		return new StreamingOutput() {
+			@Override
+			public void write(OutputStream output) throws IOException, WebApplicationException {
+				try {
+					StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
 
-			Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
-			JSONArray tuples = db.queryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, expr);
+					Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
 
-			ObjectMapper mapper = new ObjectMapper();
-			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
-			mapper.setAnnotationIntrospector(introspector);
-			JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
+					ObjectMapper mapper = new ObjectMapper();
+					AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
+					mapper.setAnnotationIntrospector(introspector);
+					JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
+					json.put("tuples", null);
+					String strJson = json.toString();
+					strJson = strJson.substring(0, strJson.length() - 5);
+					strJson += "[";
+					Log.info(json.toString());
+					
+					IOUtils.write(strJson, output);
+					
+					db.prepareQueryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, expr, limit, offset);
 
-			json.put("tuples", tuples);
-			ret = json.toString();
-		} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
-			throw WebExceptionBuilder.buildInternalServerError(e);
-		} catch (IllegalArgumentException e) {
-			throw WebExceptionBuilder.buildBadRequest(e);
-		}
-
-		return ret;
+					JSONArray tuple = db.getNextJsonTuple();
+					if (tuple != null) {
+						IOUtils.write(tuple.toString(), output);
+						while((tuple = db.getNextJsonTuple()) != null) {
+							IOUtils.write("," + tuple.toString(), output);
+						}
+					}
+					IOUtils.write("]}", output);
+					
+				} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
+					throw WebExceptionBuilder.buildInternalServerError(e);
+				} catch (IllegalArgumentException e) {
+					throw WebExceptionBuilder.buildBadRequest(e);
+				}
+			}
+		};
 	}	
 
 	@DELETE

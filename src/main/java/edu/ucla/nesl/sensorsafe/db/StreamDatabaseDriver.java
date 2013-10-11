@@ -29,7 +29,7 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void addTuple(String owner, String streamName, String strTuple) 
 			throws SQLException;
 	
-	public JSONArray queryStream(String owner, String streamName, String startTime, String endTime, String expr) 
+	public void prepareQueryStream(String owner, String streamName, String startTime, String endTime, String expr, int limit, int offset) 
 			throws SQLException, JsonProcessingException;
 	
 	public Stream getStreamInfo(String owner, String name) 
@@ -49,4 +49,6 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void deleteRule(String remoteUser, int id) throws SQLException;
 
 	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException;
+
+	public JSONArray getNextJsonTuple() throws SQLException;
 }

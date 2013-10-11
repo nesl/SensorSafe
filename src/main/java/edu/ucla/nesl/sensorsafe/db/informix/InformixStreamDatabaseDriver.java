@@ -27,6 +27,7 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -34,9 +35,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
 
-	private static String BULK_LOAD_DATA_FILE_NAME = "tmp/bulkload_data";
+	private static final String BULK_LOAD_DATA_FILE_NAME = "tmp/bulkload_data";
 
 	private static InformixStreamDatabaseDriver instance;
+
+	private PreparedStatement storedPstmt;
+	private ResultSet storedResultSet;
+	private Stream storedStream;
 
 	public static InformixStreamDatabaseDriver getInstance() {
 		if (instance == null) {
@@ -75,7 +80,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			stmt1.execute("DROP TABLE IF EXISTS rules;");
 			stmt1.execute("DELETE FROM CalendarPatterns WHERE cp_name = 'every_sec';");
 			stmt1.execute("DELETE FROM CalendarTable WHERE c_name = 'sec_cal';");
-			
+
 			initializeDatabase();
 		} finally {
 			if (stmt1 != null) 
@@ -96,7 +101,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			ResultSet rset = pstmt.executeQuery();
 			if (!rset.next())
 				initializeTables();
-			
+
 			// Add type map information
 			Map<String, Class<?>> typeMap = conn.getTypeMap();
 			typeMap.put("calendarpattern", Class.forName("com.informix.timeseries.IfmxCalendarPattern"));
@@ -431,13 +436,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt.setString(4, getChannelsSqlDataString(stream.channels));
 			pstmt.executeUpdate();
 			pstmt.close();
-			
+
 			pstmt = conn.prepareStatement("SELECT id FROM streams WHERE owner=? AND name=?");
 			pstmt.setString(1, owner);
 			pstmt.setString(2, stream.name);
 			ResultSet rset = pstmt.executeQuery();
 			rset.next();
-			
+
 			return rset.getInt(1);
 		} finally {
 			if (pstmt != null) 
@@ -477,7 +482,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		try {
 			String prefix = getChannelFormatPrefix(stream.channels);
 			String vtableName = prefix + "vtable";
-			
+
 			pstmt = conn.prepareStatement("SELECT 1 FROM systables WHERE tabname=?");
 			pstmt.setString(1, vtableName);
 			ResultSet rset = pstmt.executeQuery();
@@ -646,7 +651,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public JSONArray queryStream(String owner, String streamName, String startTime, String endTime, String expr) throws SQLException {
+	public void prepareQueryStream(String owner, 
+			String streamName, 
+			String startTime, 
+			String endTime, 
+			String expr, 
+			int limit, int offset) 
+					throws SQLException {
 		// Check if stream name exists.
 		if ( !isStreamNameExist(owner, streamName) )
 			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
@@ -667,8 +678,15 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
 			}
 
-			String sql = "SELECT * FROM " + prefix + "vtable "
-					+ "WHERE id = ?";
+			// Prepare sql statement.
+			String sql = "SELECT";
+			if (offset != 0) {
+				sql += " SKIP ?";
+			}
+			if (limit != 0) {
+				sql += " FIRST ?";
+			}
+			sql += " * FROM " + prefix + "vtable " + "WHERE id = ?"; 
 
 			if (startTs != null) 
 				sql += " AND timestamp>=?";
@@ -682,8 +700,18 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
 
-			pstmt = conn.prepareStatement(sql);
+			Log.info(sql);
+
+			pstmt = conn.prepareStatement(sql);			
 			int i = 1;
+			if (offset != 0) {
+				pstmt.setInt(i, offset);
+				i+= 1;
+			}
+			if (limit != 0) {
+				pstmt.setInt(i, limit);
+				i += 1;
+			}
 			pstmt.setInt(i, stream.id);
 			i += 1;
 			if (startTs != null) {
@@ -695,34 +723,65 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				i += 1;
 			}
 
-			ResultSet rset = pstmt.executeQuery();	
-			tuples = new JSONArray();
-			while (rset.next()) {
-				JSONArray curTuple = new JSONArray();
-				curTuple.add(rset.getTimestamp(2).toString());
-				i = 3;
-				for (Channel channel: stream.channels) {
-					if (channel.type.equals("float")) {
-						curTuple.add(rset.getDouble(i));
-					} else if (channel.type.equals("int")) {
-						curTuple.add(rset.getInt(i));
-					} else if (channel.type.equals("text")) {
-						curTuple.add(rset.getString(i));
-					} else {
-						throw new UnsupportedOperationException("Unsupported tuple format.");
-					}
-					i += 1;
-				}
-				tuples.add(curTuple);
-			}
-		} finally {
+			Log.info("executeQuery()");
+			ResultSet rset = pstmt.executeQuery();
+			Log.info("executeQuery() Done.");
+
+			storedPstmt = pstmt;
+			storedResultSet = rset;
+			storedStream = stream;
+		} catch (SQLException e) {
 			if (pstmt != null)
 				pstmt.close();
+			throw e;
 		}
-
-		return tuples;
 	}
 
+	private void cleanUpStoredInfo() throws SQLException {
+		if (storedPstmt != null) { 
+			storedPstmt.close();
+		}
+		storedResultSet = null;
+		storedPstmt = null;
+		storedStream = null;
+	}
+	
+	@Override
+	public JSONArray getNextJsonTuple() throws SQLException {
+		if (storedResultSet == null) {
+			cleanUpStoredInfo();
+			return null;
+		}
+		
+		if (storedResultSet.isClosed() || storedResultSet.isAfterLast()) {
+			cleanUpStoredInfo();
+			return null;
+		}
+		
+		int i;
+		if (storedResultSet.next()) {
+			JSONArray curTuple = new JSONArray();
+			curTuple.add(storedResultSet.getTimestamp(2).toString());
+			i = 3;
+			for (Channel channel: storedStream.channels) {
+				if (channel.type.equals("float")) {
+					curTuple.add(storedResultSet.getDouble(i));
+				} else if (channel.type.equals("int")) {
+					curTuple.add(storedResultSet.getInt(i));
+				} else if (channel.type.equals("text")) {
+					curTuple.add(storedResultSet.getString(i));
+				} else {
+					throw new UnsupportedOperationException("Unsupported tuple format.");
+				}
+				i += 1;
+			}
+			return curTuple;
+		} else {
+			cleanUpStoredInfo();
+			return null;
+		}
+	}
+	
 	private String applyRules(String user, String oriSql, Stream stream) throws SQLException {
 		PreparedStatement pstmt = null;
 		String ruleCond = null;
@@ -880,7 +939,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				pstmt.setInt(1, id);
 				pstmt.executeUpdate();
 				pstmt.close();
-				
+
 				sql = "DELETE FROM " + prefix + "streams WHERE id = ?";
 				pstmt = conn.prepareStatement(sql);
 				pstmt.executeUpdate();
@@ -963,7 +1022,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			bw = new BufferedWriter(fw);
 			bw.write(data);
 			bw.close();
-		
+
 			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
 			pstmt = conn.prepareStatement("UPDATE " + prefix + "streams SET tuples = BulkLoad(tuples, ?)");
@@ -978,5 +1037,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				bw.close();
 		}
 	}
+
 
 }

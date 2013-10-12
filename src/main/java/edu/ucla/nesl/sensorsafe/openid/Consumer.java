@@ -136,12 +136,12 @@ public class Consumer {
 				FetchResponse fetchResp = (FetchResponse) authSuccess
 						.getExtension(AxMessage.OPENID_NS_AX);
 
-				List emails = fetchResp.getAttributeValues("email");
-				String email = (String) emails.get(0);
-				List firstNames = fetchResp.getAttributeValues("firstName");
-				String firstName = (String) firstNames.get(0);
-				List lastNames = fetchResp.getAttributeValues("lastName");
-				String lastName = (String) lastNames.get(0);
+				List<String> emails = fetchResp.getAttributeValues("email");
+				String email = emails.get(0);
+				List<String> firstNames = fetchResp.getAttributeValues("firstName");
+				String firstName = firstNames.get(0);
+				List<String> lastNames = fetchResp.getAttributeValues("lastName");
+				String lastName = lastNames.get(0);
 				CurrentUser.login(new User(email, firstName, lastName));
 				return true;
 			}

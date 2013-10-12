@@ -9,7 +9,6 @@ import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.db.informix.InformixStreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class SensorSafeServletContext implements ServletContextListener {
 

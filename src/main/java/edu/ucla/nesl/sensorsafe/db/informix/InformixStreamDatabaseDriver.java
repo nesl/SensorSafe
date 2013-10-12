@@ -663,7 +663,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
 
 		PreparedStatement pstmt = null;
-		JSONArray tuples = null;
 		try {
 			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);

@@ -650,7 +650,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
-	@Override
 	public void prepareQueryStream(String owner, 
 			String streamName, 
 			String startTime, 
@@ -663,6 +662,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
 
 		PreparedStatement pstmt = null;
+		//PreparedStatement countPstmt = null;
 		try {
 			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
@@ -699,32 +699,45 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
 
+			//String countSql = sql.replace("*", "count(*)");
 			Log.info(sql);
+			//Log.info(countSql);
+			
 
-			pstmt = conn.prepareStatement(sql);			
+			pstmt = conn.prepareStatement(sql);
+			//countPstmt = conn.prepareStatement(countSql);			
 			int i = 1;
 			if (offset != 0) {
 				pstmt.setInt(i, offset);
+				//countPstmt.setInt(i, offset);
 				i+= 1;
 			}
 			if (limit != 0) {
 				pstmt.setInt(i, limit);
+				//countPstmt.setInt(i, limit);
 				i += 1;
 			}
 			pstmt.setInt(i, stream.id);
+			//countPstmt.setInt(i, stream.id);
 			i += 1;
 			if (startTs != null) {
 				pstmt.setTimestamp(i, startTs);
+				//countPstmt.setTimestamp(i, startTs);
 				i += 1;
 			}
 			if (endTs != null) {
 				pstmt.setTimestamp(i, endTs);
+				//countPstmt.setTimestamp(i, endTs);
 				i += 1;
 			}
 
-			Log.info("executeQuery()");
-			ResultSet rset = pstmt.executeQuery();
-			Log.info("executeQuery() Done.");
+			ResultSet rset;
+			/*Log.info("Executing count query");
+			ResultSet rset = countPstmt.executeQuery();
+			rset.next();
+			Log.info("count: " + rset.getInt(1));*/
+						
+			rset = pstmt.executeQuery();
 
 			storedPstmt = pstmt;
 			storedResultSet = rset;
@@ -873,6 +886,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		PreparedStatement pstmt = null;
 		Stream stream = null;
 		try {
+			Log.info(owner + "_" + name);
 			String sql = "SELECT tags, channels, id FROM streams WHERE owner = ? AND name = ?";
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, owner);

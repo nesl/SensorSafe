@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
+import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -30,6 +31,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.jaxb.JaxbAnnotationIntrospector;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
+import com.wordnik.swagger.annotations.ApiParam;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
 
@@ -45,6 +47,8 @@ import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 @Api(value = "/streams/{stream_name}", description = "Operation about an individual stream.")
 public class StreamResource {
 
+	private static final int ROW_LIMIT_WITHOUT_HTTP_STREAMING = 100;
+	
 	@Context 
 	private HttpServletRequest httpReq;
 
@@ -94,53 +98,69 @@ public class StreamResource {
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public StreamingOutput doGet(@PathParam("stream_name") final String streamName, 
+	public Object doGet(@PathParam("stream_name") final String streamName,
+			@QueryParam("http_streaming") final boolean isHttpStreaming,
 			@QueryParam("start_time") final String startTime, 
 			@QueryParam("end_time") final String endTime, 
 			@QueryParam("expr") final String expr,
-			@QueryParam("limit") final int limit,
+			@ApiParam(value = "Default value 100.") @DefaultValue("100") @QueryParam("limit") final int limit,
 			@QueryParam("offset") final int offset) {
 
-		return new StreamingOutput() {
-			@Override
-			public void write(OutputStream output) throws IOException, WebApplicationException {
-				try {
-					StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
-
-					Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
-
-					ObjectMapper mapper = new ObjectMapper();
-					AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
-					mapper.setAnnotationIntrospector(introspector);
-					JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
-					json.put("tuples", null);
-					String strJson = json.toString();
-					strJson = strJson.substring(0, strJson.length() - 5);
-					strJson += "[";
-					Log.info(json.toString());
-					
-					IOUtils.write(strJson, output);
-					
-					db.prepareQueryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, expr, limit, offset);
-
-					JSONArray tuple = db.getNextJsonTuple();
-					if (tuple != null) {
-						IOUtils.write(tuple.toString(), output);
-						while((tuple = db.getNextJsonTuple()) != null) {
-							IOUtils.write("," + tuple.toString(), output);
+		if (!isHttpStreaming && limit > ROW_LIMIT_WITHOUT_HTTP_STREAMING) {
+			throw WebExceptionBuilder.buildBadRequest("Too mcuh data requested without HTTP streaming.");
+		}
+		
+		try {
+			final StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+			Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
+			ObjectMapper mapper = new ObjectMapper();
+			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
+			mapper.setAnnotationIntrospector(introspector);
+			JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
+			json.put("tuples", null);
+			String strJson = json.toString();
+			strJson = strJson.substring(0, strJson.length() - 5) + "[";
+			db.prepareQueryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, expr, limit, offset);
+	
+			if (!isHttpStreaming) {
+				JSONArray tuple = db.getNextJsonTuple();
+				if (tuple != null) {
+					strJson += tuple.toString();
+					while((tuple = db.getNextJsonTuple()) != null) {
+						strJson += "," + tuple.toString();
+					}
+				}
+				return strJson + "]}";
+			} else {
+				final String strJsonOutput = strJson;
+				return new StreamingOutput() {
+					@Override
+					public void write(OutputStream output) throws IOException, WebApplicationException {
+						try {
+							IOUtils.write(strJsonOutput, output);
+							JSONArray tuple;
+								tuple = db.getNextJsonTuple();
+							if (tuple != null) {
+								IOUtils.write(tuple.toString(), output);
+								while((tuple = db.getNextJsonTuple()) != null) {
+									IOUtils.write("," + tuple.toString(), output);
+								}
+							}
+							IOUtils.write("]}", output);
+						} catch (SQLException e) {
+							throw WebExceptionBuilder.buildInternalServerError(e);
 						}
 					}
-					IOUtils.write("]}", output);
-					
-				} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
-					throw WebExceptionBuilder.buildInternalServerError(e);
-				} catch (IllegalArgumentException e) {
-					throw WebExceptionBuilder.buildBadRequest(e);
-				}
+				};
 			}
-		};
+		} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
+		}
 	}	
 
+	
 	@DELETE
 	@ApiOperation(value = "Delete a stream.", notes = "TBD")
 	@ApiResponses(value = {

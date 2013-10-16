@@ -51,4 +51,8 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException;
 
 	public JSONArray getNextJsonTuple() throws SQLException;
+
+	public void queryStreamTest(String remoteUser, String streamName,
+			String startTime, String endTime, String filter, int limit,
+			int offset) throws SQLException;
 }

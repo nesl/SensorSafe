@@ -39,7 +39,6 @@ import edu.ucla.nesl.sensorsafe.SensorSafeServletContext;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.tools.Log;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path("/streams/{stream_name}")
@@ -60,7 +59,20 @@ public class StreamResource {
 			@ApiResponse(code = 500, message = "Interval Server Error")
 	})
 	@Path("/bulkload")
-	public ResponseMsg doBulkLoadPost(@PathParam("stream_name") String streamName, String data) {
+	public ResponseMsg doBulkLoadPost(@PathParam("stream_name") String streamName,
+			@ApiParam(name = "str_tuple", 
+						value = "<pre>Usage:\n"
+								+ "timestamp 1st_channel 2nd_channel 3rd_channel ..\n"
+								+ "timestamp 1st_channel 2nd_channel 3rd_channel ..\n"
+								+ ".\n"
+								+ ".\n"
+								+ "\n"
+								+ "e.g.,\n"
+								+ "2013-01-01 09:20:12.12345, 12.4, 1.2, 5.5 &lt;newline&gt;\n"
+								+ "2013-01-01 09:20:13.12345, 11.4, 3.2, 1.5 &lt;newline&gt;\n"
+								+ "2013-01-01 09:20:14.12345, 10.4, 4.2, 7.5 &lt;newline&gt;\n"
+								+ "</pre>")
+			String data) {
 		
 		try {
 			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
@@ -79,7 +91,25 @@ public class StreamResource {
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Interval Server Error")
 	})
-	public String doPost(@PathParam("stream_name") String streamName, String strTuple) {
+	public String doPost(@PathParam("stream_name") String streamName, 
+			@ApiParam(name = "str_tuple", 
+						value = "<pre>Usage:\n"
+								+ "[ timestamp, 1st_channel, 2nd_channel, 3rd_channel, .. ]\n"
+								+ "\n"
+								+ "  e.g., [ \"2013-01-01 09:20:12.12345\", 12.4, 1.2, 5.5 ]\n"
+								+ "  e.g., [ null, 12.4, 1.2, 5.5 ]\n"
+								+ "\n"
+								+ "Or,\n"
+								+ "{ \"timestamp\": timestamp\n"
+								+ "  \"tuple\": [ 1st_channel, 2nd_channel, 3rd_channel, .. ] }\n"
+								+ "\n"
+								+ "  e.g., { \"timestamp\": \"2013-01-01 09:20:12.12345\"\n"
+								+ "          \"tuple\": [ 12.4, 1.2, 5.5 ] }\n"
+								+ "  e.g., { \"timestamp\": null\n"
+								+ "          \"tuple\": [ 12.4, 1.2, 5.5 ] }\n"
+								+ "\n"
+								+ "If timestamp is null, current server time will be used.</pre>") 
+			String strTuple) {
 		try {
 			StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
 			db.addTuple(httpReq.getRemoteUser(), streamName, strTuple);
@@ -102,61 +132,78 @@ public class StreamResource {
 			@QueryParam("http_streaming") final boolean isHttpStreaming,
 			@QueryParam("start_time") final String startTime, 
 			@QueryParam("end_time") final String endTime, 
-			@QueryParam("expr") final String expr,
-			@ApiParam(value = "Default value 100.") @DefaultValue("100") @QueryParam("limit") final int limit,
+			@QueryParam("filter") final String filter,
+			@ApiParam(name = "function", value = "WIP. Query test function.")  
+				@QueryParam("function") final String function ,
+			@ApiParam(value = "Default value 100.") 
+				@DefaultValue("100") @QueryParam("limit") final int limit,
 			@QueryParam("offset") final int offset) {
 
-		if (!isHttpStreaming && limit > ROW_LIMIT_WITHOUT_HTTP_STREAMING) {
-			throw WebExceptionBuilder.buildBadRequest("Too mcuh data requested without HTTP streaming.");
-		}
-		
-		try {
-			final StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
-			Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
-			ObjectMapper mapper = new ObjectMapper();
-			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
-			mapper.setAnnotationIntrospector(introspector);
-			JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
-			json.put("tuples", null);
-			String strJson = json.toString();
-			strJson = strJson.substring(0, strJson.length() - 5) + "[";
-			db.prepareQueryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, expr, limit, offset);
-	
-			if (!isHttpStreaming) {
-				JSONArray tuple = db.getNextJsonTuple();
-				if (tuple != null) {
-					strJson += tuple.toString();
-					while((tuple = db.getNextJsonTuple()) != null) {
-						strJson += "," + tuple.toString();
-					}
+		final StreamDatabaseDriver db = SensorSafeServletContext.getStreamDatabase();
+
+		if (function != null) {
+			if (function.equals("test")) {
+				try {
+					db.queryStreamTest(httpReq.getRemoteUser(), streamName, startTime, endTime, filter, limit, offset);
+				} catch (SQLException e) {
+					throw WebExceptionBuilder.buildInternalServerError(e);
 				}
-				return strJson + "]}";
+				return "test";
 			} else {
-				final String strJsonOutput = strJson;
-				return new StreamingOutput() {
-					@Override
-					public void write(OutputStream output) throws IOException, WebApplicationException {
-						try {
-							IOUtils.write(strJsonOutput, output);
-							JSONArray tuple;
-								tuple = db.getNextJsonTuple();
-							if (tuple != null) {
-								IOUtils.write(tuple.toString(), output);
-								while((tuple = db.getNextJsonTuple()) != null) {
-									IOUtils.write("," + tuple.toString(), output);
-								}
-							}
-							IOUtils.write("]}", output);
-						} catch (SQLException e) {
-							throw WebExceptionBuilder.buildInternalServerError(e);
+				throw WebExceptionBuilder.buildBadRequest("Unsupported function: " + function);
+			}
+		} else {
+			if (!isHttpStreaming && limit > ROW_LIMIT_WITHOUT_HTTP_STREAMING) {
+				throw WebExceptionBuilder.buildBadRequest("Too mcuh data requested without HTTP streaming.");
+			}
+			
+			try {
+				Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
+				ObjectMapper mapper = new ObjectMapper();
+				AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
+				mapper.setAnnotationIntrospector(introspector);
+				JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
+				json.put("tuples", null);
+				String strJson = json.toString();
+				strJson = strJson.substring(0, strJson.length() - 5) + "[";
+				db.prepareQueryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, filter, limit, offset);
+		
+				if (!isHttpStreaming) {
+					JSONArray tuple = db.getNextJsonTuple();
+					if (tuple != null) {
+						strJson += tuple.toString();
+						while((tuple = db.getNextJsonTuple()) != null) {
+							strJson += "," + tuple.toString();
 						}
 					}
-				};
+					return strJson + "]}";
+				} else {
+					final String strJsonOutput = strJson;
+					return new StreamingOutput() {
+						@Override
+						public void write(OutputStream output) throws IOException, WebApplicationException {
+							try {
+								IOUtils.write(strJsonOutput, output);
+								JSONArray tuple;
+									tuple = db.getNextJsonTuple();
+								if (tuple != null) {
+									IOUtils.write(tuple.toString(), output);
+									while((tuple = db.getNextJsonTuple()) != null) {
+										IOUtils.write("," + tuple.toString(), output);
+									}
+								}
+								IOUtils.write("]}", output);
+							} catch (SQLException e) {
+								throw WebExceptionBuilder.buildInternalServerError(e);
+							}
+						}
+					};
+				}
+			} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
+				throw WebExceptionBuilder.buildInternalServerError(e);
+			} catch (IllegalArgumentException e) {
+				throw WebExceptionBuilder.buildBadRequest(e);
 			}
-		} catch (SQLException | JsonProcessingException | UnsupportedOperationException e) {
-			throw WebExceptionBuilder.buildInternalServerError(e);
-		} catch (IllegalArgumentException e) {
-			throw WebExceptionBuilder.buildBadRequest(e);
 		}
 	}	
 

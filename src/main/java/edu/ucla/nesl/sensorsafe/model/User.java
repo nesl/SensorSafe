@@ -17,11 +17,13 @@ public class User {
 	public String email;
 
 	@XmlElement(name = "group")
-	@ApiModelProperty(value = "Group")
+	@ApiModelProperty(value = "Group", allowableValues = "owner,user,admin", required = true)
+	@NotNull
 	public String group;
 	
 	@XmlElement(name = "password")
-	@ApiModelProperty(value = "Password")
+	@ApiModelProperty(value = "Password", required = true)
+	@NotNull
 	public String password;
 	
 	@XmlElement(name = "firstName")

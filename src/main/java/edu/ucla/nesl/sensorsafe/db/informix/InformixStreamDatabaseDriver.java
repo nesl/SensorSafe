@@ -27,7 +27,8 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.tools.Log;
+
+import com.informix.timeseries.IfmxTimeSeries;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -99,13 +100,25 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, "streams");
 			ResultSet rset = pstmt.executeQuery();
-			if (!rset.next())
+			if (!rset.next()) {
 				initializeTables();
-
+			}
+			pstmt.close();
+			
 			// Add type map information
 			Map<String, Class<?>> typeMap = conn.getTypeMap();
 			typeMap.put("calendarpattern", Class.forName("com.informix.timeseries.IfmxCalendarPattern"));
 			typeMap.put("calendar", Class.forName("com.informix.timeseries.IfmxCalendar"));
+			
+			sql = "SELECT channels FROM streams";
+			pstmt = conn.prepareStatement(sql);
+			rset = pstmt.executeQuery();
+			while (rset.next()) {
+				String typeName = "timeseries(" + getRowTypeName(getListChannelFromSqlArray(rset.getArray(1))) + ")";
+				if (!typeMap.containsKey(typeName)) {
+					typeMap.put(typeName, Class.forName("com.informix.timeseries.IfmxTimeSeries"));
+				}
+			}			
 			conn.setTypeMap(typeMap);
 		} finally {
 			if (pstmt != null)
@@ -694,50 +707,34 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			if (expr != null) 
 				sql += " AND ( " + expr + " )";
 
+			// TODO find out requesting user name.
 			sql = applyRules(null, sql, stream);
 
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
 
-			//String countSql = sql.replace("*", "count(*)");
-			Log.info(sql);
-			//Log.info(countSql);
-			
-
 			pstmt = conn.prepareStatement(sql);
-			//countPstmt = conn.prepareStatement(countSql);			
 			int i = 1;
 			if (offset != 0) {
 				pstmt.setInt(i, offset);
-				//countPstmt.setInt(i, offset);
 				i+= 1;
 			}
 			if (limit != 0) {
 				pstmt.setInt(i, limit);
-				//countPstmt.setInt(i, limit);
 				i += 1;
 			}
 			pstmt.setInt(i, stream.id);
-			//countPstmt.setInt(i, stream.id);
 			i += 1;
 			if (startTs != null) {
 				pstmt.setTimestamp(i, startTs);
-				//countPstmt.setTimestamp(i, startTs);
 				i += 1;
 			}
 			if (endTs != null) {
 				pstmt.setTimestamp(i, endTs);
-				//countPstmt.setTimestamp(i, endTs);
 				i += 1;
 			}
 
-			ResultSet rset;
-			/*Log.info("Executing count query");
-			ResultSet rset = countPstmt.executeQuery();
-			rset.next();
-			Log.info("count: " + rset.getInt(1));*/
-						
-			rset = pstmt.executeQuery();
+			ResultSet rset = pstmt.executeQuery();
 
 			storedPstmt = pstmt;
 			storedResultSet = rset;
@@ -794,7 +791,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 	
-	private String applyRules(String user, String oriSql, Stream stream) throws SQLException {
+	private String applyRules(String requestingUser, String oriSql, Stream stream) throws SQLException {
 		PreparedStatement pstmt = null;
 		String ruleCond = null;
 		try {
@@ -802,21 +799,21 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			String allowRuleCond = null;
 			String denyRuleCond = null;
 
-			if (user == null) 
-				sql = "SELECT * FROM rules WHERE action = ? AND ? IN target_streams OR target_streams IS NULL";
+			if (requestingUser == null) 
+				sql = "SELECT condition FROM rules WHERE action = ? AND ( ? IN target_streams OR target_streams IS NULL )";
 			else
-				sql = "SELECT * FROM rules WHERE action = ? AND (? IN target_streams OR target_streams IS NULL) AND (? IN target_users OR target_users IS NULL)";
+				sql = "SELECT condition FROM rules WHERE action = ? AND ( ? IN target_streams OR target_streams IS NULL) AND ( ? IN target_users OR target_users IS NULL )";
 
 			// Process allow rules			
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, "allow");
 			pstmt.setString(2, stream.name);
-			if (user != null)
-				pstmt.setString(3, user);
+			if (requestingUser != null)
+				pstmt.setString(3, requestingUser);
 			ResultSet rset = pstmt.executeQuery();
 			List<String> sqlFragList = new LinkedList<String>();
 			while (rset.next()) {
-				String condition = rset.getString(3);
+				String condition = rset.getString(1);				
 				sqlFragList.add("( " + condition + " )"); 
 			}
 			if (sqlFragList.size() > 0)
@@ -829,8 +826,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, "deny");
 			pstmt.setString(2, stream.name);
-			if (user != null)
-				pstmt.setString(3, user);
+			if (requestingUser != null)
+				pstmt.setString(3, requestingUser);
 			rset = pstmt.executeQuery();
 			sqlFragList = new LinkedList<String>();
 			while (rset.next()) {
@@ -886,7 +883,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		PreparedStatement pstmt = null;
 		Stream stream = null;
 		try {
-			Log.info(owner + "_" + name);
 			String sql = "SELECT tags, channels, id FROM streams WHERE owner = ? AND name = ?";
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, owner);
@@ -955,9 +951,10 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 				sql = "DELETE FROM " + prefix + "streams WHERE id = ?";
 				pstmt = conn.prepareStatement(sql);
+				pstmt.setInt(1, id);
 				pstmt.executeUpdate();
 
-				// Delete some portions of the stream.
+			// Delete some portions of the stream.
 			} else if (startTime != null && endTime != null) {
 				Timestamp startTs = null, endTs = null;
 				try {
@@ -969,19 +966,12 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
 				}
 
-				String strStartTs = null, strEndTs = null;
-				if (startTs != null) {
-					strStartTs = "'" + startTs.toString() + "'::DATETIME YEAR TO FRACTION(5)"; 
-				}
-				if (endTs != null) {
-					strEndTs = "'" + endTs.toString() + "'::DATETIME YEAR TO FRACTION(5)";
-				}
-
 				sql = "UPDATE " + prefix + "streams SET tuples = "
-						+ "DelRange(tuples, " + strStartTs + ", " + strEndTs + ") "
-						+ "WHERE id = ?";
+						+ "DelRange(tuples, ?, ?) WHERE id = ?";
 				pstmt = conn.prepareStatement(sql);
-				pstmt.setInt(1, id);
+				pstmt.setTimestamp(1, startTs);
+				pstmt.setTimestamp(2, endTs);
+				pstmt.setInt(3, id);
 				pstmt.executeUpdate();
 			} else {
 				throw new IllegalArgumentException("Both the query parameters start_time and end_time or none of them should be provided.");
@@ -1048,6 +1038,66 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				fw.close();
 			if (bw != null)
 				bw.close();
+		}
+	}
+
+	@Override
+	public void queryStreamTest(String owner, String streamName,
+			String startTime, String endTime, String filter, int limit,
+			int offset) throws SQLException {
+		// Check if stream name exists.
+		if ( !isStreamNameExist(owner, streamName) )
+			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
+
+		PreparedStatement pstmt = null;
+		//PreparedStatement countPstmt = null;
+		try {
+			Stream stream = getStreamInfo(owner, streamName);
+			String prefix = getChannelFormatPrefix(stream.channels);
+
+			Timestamp startTs = null, endTs = null;
+			try {
+				if (startTime != null) 
+					startTs = Timestamp.valueOf(startTime);
+				if (endTime != null)
+					endTs = Timestamp.valueOf(endTime);
+			} catch (IllegalArgumentException e) {
+				throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
+			}
+
+			// Prepare sql statement.
+			String sql = "SELECT Apply('$channel1, $channel2, $channel3', '" + filter + "', ?, ?, tuples)::TimeSeries(" + prefix + "rowtype) "
+					+ "FROM " + prefix + "streams WHERE id = ?";
+			
+			//Log.info(sql);
+
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setTimestamp(1, startTs);
+			pstmt.setTimestamp(2, endTs);
+			pstmt.setInt(3, stream.id);
+			
+			//Log.info("Executing query...");
+			
+			ResultSet rset;			
+			rset = pstmt.executeQuery();
+			
+			//Log.info("Done.");
+			
+			if (rset.next()) {
+				//Log.info("rset.getObject()");
+				IfmxTimeSeries tseries = (IfmxTimeSeries) rset.getObject(1);
+				//Log.info("Done.");
+				while (tseries.next()) {
+					//Log.info("result: " + tseries.getTimestamp(1) + ", " + tseries.getInt(2) + ", " + tseries.getInt(3) + ", " + tseries.getInt(4));
+				}
+			} else {
+				//Log.info("rset.next() returned false.");
+			}
+			//Log.info("Done.");
+		} catch (SQLException e) {
+			if (pstmt != null)
+				pstmt.close();
+			throw e;
 		}
 	}
 

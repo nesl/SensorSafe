@@ -63,6 +63,11 @@
 
 	<dependencies>
 		<dependency>
+			<groupId>com.informix.jdbcx</groupId>
+			<artifactId>informix-jdbcx-driver</artifactId>
+			<version>3.70JC7</version>
+		</dependency>
+		<dependency>
 			<groupId>com.informix.jdbc</groupId>
 			<artifactId>informix-jdbc-driver</artifactId>
 			<version>3.70JC7</version>

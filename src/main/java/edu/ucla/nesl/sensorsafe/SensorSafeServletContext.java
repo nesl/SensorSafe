@@ -1,49 +1,29 @@
 package edu.ucla.nesl.sensorsafe;
 
+import java.io.IOException;
 import java.sql.SQLException;
 
+import javax.naming.NamingException;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
-import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.db.informix.InformixStreamDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class SensorSafeServletContext implements ServletContextListener {
 
-	private static StreamDatabaseDriver streamDb;
-	private static UserDatabaseDriver userDb;
-	
-	public static StreamDatabaseDriver getStreamDatabase() {
-		return streamDb;
-	}
-	
-	public static UserDatabaseDriver getUserDatabase() {
-		return userDb;
+	@Override
+	public void contextInitialized(ServletContextEvent arg0) {
+		Log.info("SensorSafe is starting up...");
+		try {
+			InformixDatabaseDriver.init();
+		} catch (SQLException | IOException | NamingException e) {
+			e.printStackTrace();
+		}
 	}
 
 	@Override
 	public void contextDestroyed(ServletContextEvent arg0) {
-		try {
-			if (streamDb != null) 
-				streamDb.close();
-			if (userDb != null)
-				userDb.close();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-	}
-
-	@Override
-	public void contextInitialized(ServletContextEvent arg0) {
-		try {
-			streamDb = InformixStreamDatabaseDriver.getInstance();
-			userDb = InformixUserDatabaseDriver.getInstance();
-			streamDb.connect();
-			userDb.connect();
-		} catch (ClassNotFoundException | SQLException e) {
-			e.printStackTrace();
-		}
+		Log.info("SensorSafe is being closed...");
 	}
 }

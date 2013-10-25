@@ -1,34 +1,57 @@
 package edu.ucla.nesl.sensorsafe.db.informix;
 
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
+
+import javax.naming.Context;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.sql.DataSource;
+
+import com.informix.jdbcx.IfxConnectionPoolDataSource;
+import com.informix.jdbcx.IfxDataSource;
 
 import edu.ucla.nesl.sensorsafe.db.DatabaseDriver;
 
 abstract public class InformixDatabaseDriver implements DatabaseDriver {
 
-	// TODO Read this from properties file.
-	private static final String HOST_SERVER_DNS_NAME = "ibmdb";
-	private static final String HOST_SERVER_PORT = "24172";
-	private static final String DB_SERVER_NAME = "sensorsafe";
-	private static final String DB_NAME = "sensorsafe";
-	private static final String DB_USERNAME = "informix";
-	private static final String DB_PASSWORD = "sensorsafe!";
+	private static final String INFORMIX_PROP_FILENAME = "informix_ds.prop";
+	private static final String INFORMIX_CPDS_PROP_FILENAME = "informix_cpds.prop";
+	private static final String INFORMIX_DS_NAME = "SensorsafePooledDataSource";
+	
+	protected static DataSource dataSource;
 
-	protected static final String DB_CONNECT_URL = "jdbc:informix-sqli://" 
-			+ HOST_SERVER_DNS_NAME + ":" + HOST_SERVER_PORT + "/" + DB_NAME +
-			":INFORMIXSERVER=" + DB_SERVER_NAME + 
-			";user=" + DB_USERNAME + 
-			";password=" + DB_PASSWORD;
+	protected Connection conn;	
 
-	protected Connection conn;
-
+	public InformixDatabaseDriver() throws SQLException, IOException, NamingException, ClassNotFoundException {
+		init();
+		connect();
+	}
+	
+	public static void init() throws SQLException, IOException, NamingException {
+		if (dataSource == null) {
+			Context registry = new InitialContext();
+			IfxDataSource ds = new IfxDataSource();
+			FileInputStream dsPropFile = new FileInputStream(INFORMIX_PROP_FILENAME);
+			ds.readProperties(dsPropFile);
+			String CPDSName = ds.getDataSourceName();
+			if (CPDSName != null) {
+				IfxConnectionPoolDataSource cpds = new IfxConnectionPoolDataSource();
+				FileInputStream cpdsPropFile = new FileInputStream(INFORMIX_CPDS_PROP_FILENAME);
+				cpds.readProperties(cpdsPropFile);
+				registry.rebind(CPDSName, cpds);		
+			}
+			registry.rebind(INFORMIX_DS_NAME, ds);
+			dataSource = (DataSource) registry.lookup(INFORMIX_DS_NAME);
+		}
+	}
+	
 	@Override
 	public void connect() throws SQLException, ClassNotFoundException {
 		if (conn == null) {
-			Class.forName("com.informix.jdbc.IfxDriver");
-			conn = DriverManager.getConnection(DB_CONNECT_URL);
+			conn = dataSource.getConnection();
 			initializeDatabase();
 		}
 	}

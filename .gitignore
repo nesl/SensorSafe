@@ -3,3 +3,6 @@ target/
 .project
 .settings/
 tmp/
+.swp
+.trc
+.phd

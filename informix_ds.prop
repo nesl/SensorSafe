@@ -1,0 +1,8 @@
+INFORMIXSERVER = sensorsafe
+USER = informix
+PASSWORD = sensorsafe!
+DATABASE = sensorsafe
+IFXHOST= ibmdb
+PORTNO = 24172
+DSNAME = sensorsafeCPDS
+

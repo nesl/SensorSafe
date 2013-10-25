@@ -1,8 +1,11 @@
 package edu.ucla.nesl.sensorsafe.db.informix;
 
+import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+
+import javax.naming.NamingException;
 
 import edu.ucla.nesl.sensorsafe.Const;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
@@ -10,17 +13,9 @@ import edu.ucla.nesl.sensorsafe.model.User;
 
 public class InformixUserDatabaseDriver extends InformixDatabaseDriver implements UserDatabaseDriver {
 
-	private static InformixUserDatabaseDriver instance;
-	
-	public static InformixUserDatabaseDriver getInstance() {
-		if (instance == null) {
-			instance = new InformixUserDatabaseDriver();
-		}
-		return instance;
-	}
-
-	private InformixUserDatabaseDriver() {
-		// TODO Load database configuration properties here.
+	public InformixUserDatabaseDriver() throws SQLException, IOException,
+			NamingException, ClassNotFoundException {
+		super();
 	}
 
 	@Override

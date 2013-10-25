@@ -16,6 +16,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import javax.naming.NamingException;
+
 import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import net.minidev.json.JSONValue;
@@ -32,28 +34,20 @@ import com.informix.timeseries.IfmxTimeSeries;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
+	public InformixStreamDatabaseDriver() throws SQLException, IOException,
+			NamingException, ClassNotFoundException {
+		super();
+	}
+
 	private static final String ORIGIN_TIMESTAMP = "2000-01-01 00:00:00.00000";
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
 
 	private static final String BULK_LOAD_DATA_FILE_NAME = "tmp/bulkload_data";
 
-	private static InformixStreamDatabaseDriver instance;
-
 	private PreparedStatement storedPstmt;
 	private ResultSet storedResultSet;
 	private Stream storedStream;
-
-	public static InformixStreamDatabaseDriver getInstance() {
-		if (instance == null) {
-			instance = new InformixStreamDatabaseDriver();
-		}
-		return instance;
-	}
-
-	private InformixStreamDatabaseDriver() {
-		// TODO Load database configuration properties here.
-	}
 
 	@Override
 	public void clean() throws SQLException, ClassNotFoundException {
@@ -104,12 +98,12 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				initializeTables();
 			}
 			pstmt.close();
-			
+
 			// Add type map information
 			Map<String, Class<?>> typeMap = conn.getTypeMap();
 			typeMap.put("calendarpattern", Class.forName("com.informix.timeseries.IfmxCalendarPattern"));
 			typeMap.put("calendar", Class.forName("com.informix.timeseries.IfmxCalendar"));
-			
+
 			sql = "SELECT channels FROM streams";
 			pstmt = conn.prepareStatement(sql);
 			rset = pstmt.executeQuery();
@@ -692,10 +686,10 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 			// Prepare sql statement.
 			String sql = "SELECT";
-			if (offset != 0) {
+			if (offset > 0) {
 				sql += " SKIP ?";
 			}
-			if (limit != 0) {
+			if (limit > 0) {
 				sql += " FIRST ?";
 			}
 			sql += " * FROM " + prefix + "vtable " + "WHERE id = ?"; 
@@ -715,11 +709,11 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 			pstmt = conn.prepareStatement(sql);
 			int i = 1;
-			if (offset != 0) {
+			if (offset > 0) {
 				pstmt.setInt(i, offset);
 				i+= 1;
 			}
-			if (limit != 0) {
+			if (limit > 0) {
 				pstmt.setInt(i, limit);
 				i += 1;
 			}
@@ -754,19 +748,19 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		storedPstmt = null;
 		storedStream = null;
 	}
-	
+
 	@Override
 	public JSONArray getNextJsonTuple() throws SQLException {
 		if (storedResultSet == null) {
 			cleanUpStoredInfo();
 			return null;
 		}
-		
+
 		if (storedResultSet.isClosed() || storedResultSet.isAfterLast()) {
 			cleanUpStoredInfo();
 			return null;
 		}
-		
+
 		int i;
 		if (storedResultSet.next()) {
 			JSONArray curTuple = new JSONArray();
@@ -790,7 +784,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			return null;
 		}
 	}
-	
+
 	private String applyRules(String requestingUser, String oriSql, Stream stream) throws SQLException {
 		PreparedStatement pstmt = null;
 		String ruleCond = null;
@@ -954,7 +948,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				pstmt.setInt(1, id);
 				pstmt.executeUpdate();
 
-			// Delete some portions of the stream.
+				// Delete some portions of the stream.
 			} else if (startTime != null && endTime != null) {
 				Timestamp startTs = null, endTs = null;
 				try {
@@ -1025,6 +1019,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			bw = new BufferedWriter(fw);
 			bw.write(data);
 			bw.close();
+			fw.close();
 
 			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
@@ -1068,21 +1063,21 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			// Prepare sql statement.
 			String sql = "SELECT Apply('$channel1, $channel2, $channel3', '" + filter + "', ?, ?, tuples)::TimeSeries(" + prefix + "rowtype) "
 					+ "FROM " + prefix + "streams WHERE id = ?";
-			
+
 			//Log.info(sql);
 
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setTimestamp(1, startTs);
 			pstmt.setTimestamp(2, endTs);
 			pstmt.setInt(3, stream.id);
-			
+
 			//Log.info("Executing query...");
-			
+
 			ResultSet rset;			
 			rset = pstmt.executeQuery();
-			
+
 			//Log.info("Done.");
-			
+
 			if (rset.next()) {
 				//Log.info("rset.getObject()");
 				IfmxTimeSeries tseries = (IfmxTimeSeries) rset.getObject(1);

@@ -8,13 +8,13 @@ import com.wordnik.swagger.annotations.ApiModelProperty;
 @XmlRootElement(name = "responseMsg")
 public class ResponseMsg {
 	
-	@XmlElement(name = "msg")
+	@XmlElement(name = "message")
 	@ApiModelProperty(value = "Response message.")
-	String msg;
+	String message;
 	
 	public ResponseMsg() {}
 	
 	public ResponseMsg(String msg) {
-		this.msg = msg;
+		this.message = msg;
 	}
 }

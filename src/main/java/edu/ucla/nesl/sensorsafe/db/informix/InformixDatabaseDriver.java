@@ -26,11 +26,10 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 	protected Connection conn;	
 
 	public InformixDatabaseDriver() throws SQLException, IOException, NamingException, ClassNotFoundException {
-		init();
 		connect();
 	}
 	
-	public static void init() throws SQLException, IOException, NamingException {
+	public static void initializeConnectionPool() throws SQLException, IOException, NamingException {
 		if (dataSource == null) {
 			Context registry = new InitialContext();
 			IfxDataSource ds = new IfxDataSource();
@@ -49,10 +48,12 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 	}
 	
 	@Override
-	public void connect() throws SQLException, ClassNotFoundException {
+	public void connect() throws SQLException, ClassNotFoundException, IOException, NamingException {
+		if (dataSource == null) {
+			initializeConnectionPool();
+		}
 		if (conn == null) {
 			conn = dataSource.getConnection();
-			initializeDatabase();
 		}
 	}
 
@@ -63,6 +64,4 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 			conn = null;
 		}
 	}
-	
-	abstract protected void initializeDatabase() throws SQLException, ClassNotFoundException;
 }

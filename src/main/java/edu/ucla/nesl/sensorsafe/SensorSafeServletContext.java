@@ -8,6 +8,8 @@ import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 
 import edu.ucla.nesl.sensorsafe.db.informix.InformixDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixStreamDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class SensorSafeServletContext implements ServletContextListener {
@@ -16,8 +18,10 @@ public class SensorSafeServletContext implements ServletContextListener {
 	public void contextInitialized(ServletContextEvent arg0) {
 		Log.info("SensorSafe is starting up...");
 		try {
-			InformixDatabaseDriver.init();
-		} catch (SQLException | IOException | NamingException e) {
+			InformixDatabaseDriver.initializeConnectionPool();
+			InformixUserDatabaseDriver.initializeDatabase();
+			InformixStreamDatabaseDriver.initializeDatabase();
+		} catch (SQLException | IOException | NamingException | ClassNotFoundException e) {
 			e.printStackTrace();
 		}
 	}

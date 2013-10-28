@@ -1,6 +1,7 @@
 package edu.ucla.nesl.sensorsafe.db.informix;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -18,10 +19,11 @@ public class InformixUserDatabaseDriver extends InformixDatabaseDriver implement
 		super();
 	}
 
-	@Override
-	protected void initializeDatabase() throws SQLException {
+	public static void initializeDatabase() throws SQLException {
+		Connection conn = null;
 		PreparedStatement pstmt = null;
 		try {
+			conn = dataSource.getConnection();
 			pstmt = conn.prepareStatement("SELECT 1 FROM systables WHERE tabname=?");
 			pstmt.setString(1, Const.TABLE_ADMIN_USERS);
 			ResultSet rset = pstmt.executeQuery();
@@ -38,12 +40,16 @@ public class InformixUserDatabaseDriver extends InformixDatabaseDriver implement
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
+			if (conn != null)
+				conn.close();
 		}
 	}
 
-	private void initializeTables() throws SQLException {
+	private static void initializeTables() throws SQLException {
 		PreparedStatement pstmt = null;
+		Connection conn = null;
 		try {
+			conn = dataSource.getConnection();
 			pstmt = conn.prepareStatement("DROP TABLE IF EXISTS " + Const.TABLE_ADMIN_USERS + ";");
 			pstmt.execute(); pstmt.close();
 			pstmt = conn.prepareStatement("CREATE TABLE " + Const.TABLE_ADMIN_USERS + " ("
@@ -78,6 +84,8 @@ public class InformixUserDatabaseDriver extends InformixDatabaseDriver implement
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
+			if (conn != null)
+				conn.close();
 		}
 	}
 

@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Array;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -35,7 +36,6 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -92,11 +92,12 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
-	@Override
-	protected void initializeDatabase() throws SQLException, ClassNotFoundException {
+	public static void initializeDatabase() throws SQLException, ClassNotFoundException {
 		PreparedStatement pstmt = null;
+		Connection conn = null;
 		try {
 			// Check if tables are there in database.
+			conn = dataSource.getConnection();
 			String sql = "SELECT 1 FROM systables WHERE tabname=?";
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, "streams");
@@ -124,14 +125,18 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
+			if (conn != null)
+				conn.close();
 		}
 
 	}
 
-	private void initializeTables() throws SQLException, ClassNotFoundException {
+	private static void initializeTables() throws SQLException, ClassNotFoundException {
 
 		Statement stmt = null;
+		Connection conn = null;
 		try {
+			conn = dataSource.getConnection();
 			stmt = conn.createStatement();
 
 			// calendars
@@ -175,10 +180,12 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		finally {
 			if (stmt != null)
 				stmt.close();
+			if (conn != null)
+				conn.close();
 		}
 	}
 
-	private List<Channel> getListChannelFromSqlArray(Array sqlArray) throws SQLException {
+	private static List<Channel> getListChannelFromSqlArray(Array sqlArray) throws SQLException {
 		List<Channel> channels = new LinkedList<Channel>();
 		Object[] objArray = (Object[])sqlArray.getArray();
 		for (Object obj: objArray) {
@@ -189,7 +196,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		return channels;
 	}
 
-	private String getChannelFormatPrefix(List<Channel> channels) {
+	private static String getChannelFormatPrefix(List<Channel> channels) {
 		String prefix = "";
 		for (Channel channel: channels) {
 			prefix += channel.type + "_";
@@ -416,7 +423,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}	
 
-	private String getRowTypeName(List<Channel> channels) {
+	private static String getRowTypeName(List<Channel> channels) {
 		return getChannelFormatPrefix(channels) + "rowtype";
 	}
 

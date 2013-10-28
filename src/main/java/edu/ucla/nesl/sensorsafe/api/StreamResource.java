@@ -160,6 +160,8 @@ public class StreamResource {
 			db.bulkLoad(httpReq.getRemoteUser(), streamName, data);
 		} catch (SQLException | IOException | ClassNotFoundException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
 		} finally {
 			if (db != null) {
 				try {

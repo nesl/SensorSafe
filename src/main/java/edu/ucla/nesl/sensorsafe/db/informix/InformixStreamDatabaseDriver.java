@@ -23,14 +23,19 @@ import net.minidev.json.JSONObject;
 import net.minidev.json.JSONValue;
 
 import org.apache.commons.lang.StringUtils;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.ISODateTimeFormat;
+
+import com.informix.timeseries.IfmxTimeSeries;
 
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-
-import com.informix.timeseries.IfmxTimeSeries;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -45,6 +50,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 	private static final String BULK_LOAD_DATA_FILE_NAME = "tmp/bulkload_data";
 
+	private static final String SQL_DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss.SSSSS";
+	
 	private PreparedStatement storedPstmt;
 	private ResultSet storedResultSet;
 	private Stream storedStream;
@@ -1004,23 +1011,114 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
-	@Override
-	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException {
-		PreparedStatement pstmt = null;
+	private String findDelimiter(String line) {
+		String[] cols = line.split(",");
+		if (cols.length > 1) {
+			return ",";
+		}
+		
+		cols = line.split("\t");
+		if (cols.length > 1) {
+			return "\t";
+		}
+		
+		throw new IllegalArgumentException("Unable to determine column delimiter.  Supported delimiters are tab or comma.");
+	}
+	
+	private DateTimeFormatter findDateTimeFormat(String[] lines, String delimiter) {
+		DateTimeFormatter isoFmt = ISODateTimeFormat.dateTime();
+		DateTimeFormatter sqlFmt = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN);
+		DateTimeFormatter returnFmt = null;
+		
+		String timestamp = lines[0].split(delimiter, 2)[0];
+		DateTime dt = null;
+		try {
+			dt = isoFmt.parseDateTime(timestamp);
+			returnFmt = isoFmt;
+		} catch (IllegalArgumentException e) {
+			try {
+				dt = sqlFmt.parseDateTime(timestamp);
+				returnFmt = sqlFmt;
+			} catch (IllegalArgumentException e1) {
+				// If first line fails, try for 2nd line because CSV file might have header line.
+				lines[0] = null;
+				timestamp = lines[1].split(delimiter, 2)[0];
+				try {
+					dt = isoFmt.parseDateTime(timestamp);
+					returnFmt = isoFmt;
+				} catch (IllegalArgumentException e2) {
+					try {
+						dt = sqlFmt.parseDateTime(timestamp);
+						returnFmt = sqlFmt;
+					} catch (IllegalArgumentException e3) {
+					}
+				}
+			}
+		}
+		
+		if (returnFmt == null) {
+			throw new IllegalArgumentException("Unsupported date time format.  Supported formats are ISO 8601 or SQL standard format (yyyy-MM-dd HH:mm:ss.SSSSS).");
+		}
+		
+		return returnFmt;
+	}
+	
+	private void makeStringValidBulkloadFile(String data, String fileName) throws IOException {
 		FileWriter fw = null;
 		BufferedWriter bw = null;
+		
 		try {
-			File file = new File(BULK_LOAD_DATA_FILE_NAME);
+			File file = new File(fileName);
 			if (file.exists()) {
 				file.delete();				
 			}
 			file.createNewFile();
 			fw = new FileWriter(file.getAbsoluteFile());
 			bw = new BufferedWriter(fw);
-			bw.write(data);
-			bw.close();
-			fw.close();
 
+			String lineSeparator = System.getProperty("line.separator");
+			String[] lines = data.split(lineSeparator);
+
+			// Determine delimiter
+			String delimiter = findDelimiter(lines[0]);
+			
+			// Determine date time format
+			DateTimeFormatter fmt = findDateTimeFormat(lines, delimiter);
+			DateTimeFormatter sqlFmt = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN);
+			
+			for (String line: lines) {
+				if (line == null) {
+					continue;
+				}
+				
+				String[] cols = line.split(delimiter, 2);
+				String timestamp = cols[0];
+				String values = cols[1];
+
+				DateTime dt = null;
+				try {
+					dt = fmt.parseDateTime(timestamp);
+				} catch (IllegalArgumentException e) {
+					throw new IllegalArgumentException("Unable to parse timestamp: " + timestamp);
+				}
+				
+				bw.write(dt.toString(sqlFmt) + delimiter + values + lineSeparator);
+			}
+			
+		} finally {
+			if (bw != null)
+				bw.close();
+			if (fw != null)
+				fw.close();
+		}
+	}
+	
+	@Override
+	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException {
+		PreparedStatement pstmt = null;
+		try {
+			makeStringValidBulkloadFile(data, BULK_LOAD_DATA_FILE_NAME);
+			File file = new File(BULK_LOAD_DATA_FILE_NAME);
 			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
 			pstmt = conn.prepareStatement("UPDATE " + prefix + "streams SET tuples = BulkLoad(tuples, ?) WHERE id = ?");
@@ -1030,10 +1128,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		} finally {
 			if (pstmt != null) 
 				pstmt.close();
-			if (fw != null)
-				fw.close();
-			if (bw != null)
-				bw.close();
 		}
 	}
 

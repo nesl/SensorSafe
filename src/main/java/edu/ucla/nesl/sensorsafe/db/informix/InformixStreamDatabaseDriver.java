@@ -420,7 +420,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		try {
 			stmt = conn.createStatement();
 			String sql = "CREATE TABLE IF NOT EXISTS " + table 
-					+ " (id BIGINT NOT NULL PRIMARY KEY, tuples TIMESERIES(" + rowtype + "))";
+					+ " (id BIGINT NOT NULL PRIMARY KEY, tuples TIMESERIES(" + rowtype + ")) LOCK MODE ROW";
 			stmt.execute(sql);
 		} finally {
 			if (stmt != null) 
@@ -1023,8 +1023,9 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
-			pstmt = conn.prepareStatement("UPDATE " + prefix + "streams SET tuples = BulkLoad(tuples, ?)");
+			pstmt = conn.prepareStatement("UPDATE " + prefix + "streams SET tuples = BulkLoad(tuples, ?) WHERE id = ?");
 			pstmt.setString(1, file.getAbsolutePath());
+			pstmt.setInt(2, stream.id);
 			pstmt.executeUpdate();
 		} finally {
 			if (pstmt != null) 

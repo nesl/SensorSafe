@@ -3,9 +3,11 @@ package edu.ucla.nesl.sensorsafe.api;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.sql.SQLException;
+import java.util.List;
 
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
+import javax.validation.Valid;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
@@ -39,11 +41,12 @@ import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.model.StreamCollection;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
-@Path("/streams/{stream_name}")
+@Path("/streams")
 @Produces(MediaType.APPLICATION_JSON)
-@Api(value = "/streams/{stream_name}", description = "Operation about an individual stream.")
+@Api(value = "/streams", description = "Operations about streams.")
 public class StreamResource {
 
 	private static final int ROW_LIMIT_WITHOUT_HTTP_STREAMING = 100;
@@ -51,27 +54,105 @@ public class StreamResource {
 	@Context 
 	private HttpServletRequest httpReq;
 
+	@GET
+	@ApiOperation(value = "Get list of streams", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
+	public StreamCollection doGetAllStreams() {    	
+		StreamCollection streamCollection;
+		StreamDatabaseDriver db = null;
+		try {
+			db = DatabaseConnector.getStreamDatabase();
+			List<Stream> streams = db.getStreamList(httpReq.getRemoteUser());
+			streamCollection = new StreamCollection(streams);
+		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		} finally {
+			if (db != null) {
+				try {
+					db.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return streamCollection;
+	}
+
 	@POST
+	@Consumes(MediaType.APPLICATION_JSON)
+	@ApiOperation(value = "Create a new stream", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
+	public ResponseMsg doPostNewStream(@Valid Stream stream) {
+		StreamDatabaseDriver db = null;
+		try {
+			db = DatabaseConnector.getStreamDatabase();
+			db.createStream(httpReq.getRemoteUser(), stream);
+		} catch (IOException | NamingException | SQLException | ClassNotFoundException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
+		} finally {
+			if (db != null) {
+				try {
+					db.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return new ResponseMsg("Successfully created a new stream: " + stream.name);
+	}
+
+	@DELETE
+	@ApiOperation(value = "Delete entire streams.", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
+	public ResponseMsg doDeleteAllStreams() {
+		StreamDatabaseDriver db = null;
+		try {
+			db = DatabaseConnector.getStreamDatabase();
+			db.deleteAllStreams(httpReq.getRemoteUser());
+		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		} finally {
+			if (db != null) {
+				try {
+					db.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return new ResponseMsg("Successfully deleted all streams.");
+	}
+
+	
+	@POST
+	@Path("/{stream_name}.csv")
 	@Consumes(MediaType.APPLICATION_OCTET_STREAM)
-	@ApiOperation(value = "Bulkload tuples to a stream.", notes = "TBD")
+	@ApiOperation(value = "Load csv file to a stream.", notes = "TBD")
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Interval Server Error")
 	})
-	@Path("/bulkload")
-	public ResponseMsg doBulkLoadPost(@PathParam("stream_name") String streamName,
+	public ResponseMsg doPostStreamCsv(@PathParam("stream_name") String streamName,
 			@ApiParam(name = "str_tuple", 
 			value = "<pre>Usage:\n"
-					+ "timestamp 1st_channel 2nd_channel 3rd_channel ..\n"
-					+ "timestamp 1st_channel 2nd_channel 3rd_channel ..\n"
+					+ "timestamp, 1st_channel, 2nd_channel, 3rd_channel, ..\n"
+					+ "timestamp, 1st_channel, 2nd_channel, 3rd_channel, ..\n"
 					+ ".\n"
 					+ ".\n"
 					+ "\n"
 					+ "e.g.,\n"
-					+ "2013-01-01 09:20:12.12345, 12.4, 1.2, 5.5 &lt;newline&gt;\n"
-					+ "2013-01-01 09:20:13.12345, 11.4, 3.2, 1.5 &lt;newline&gt;\n"
-					+ "2013-01-01 09:20:14.12345, 10.4, 4.2, 7.5 &lt;newline&gt;\n"
+					+ "2013-01-01 09:20:12.12345, 12.4, 1.2, 5.5\n"
+					+ "2013-01-01 09:20:13.12345, 11.4, 3.2, 1.5\n"
+					+ "2013-01-01 09:20:14.12345, 10.4, 4.2, 7.5\n"
 					+ "</pre>")
-	String data) {
+			String data) {
 
 		StreamDatabaseDriver db = null;
 		try {
@@ -92,12 +173,13 @@ public class StreamResource {
 	}
 
 	@POST
+	@Path("/{stream_name}")
 	@Consumes(MediaType.APPLICATION_JSON)
 	@ApiOperation(value = "Add a new tuple to the stream.", notes = "TBD")
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Interval Server Error")
 	})
-	public ResponseMsg doPost(
+	public ResponseMsg doPostStream(
 			@PathParam("stream_name") String streamName, 
 			@ApiParam(name = "str_tuple", 
 					value = "<pre>Usage:\n"
@@ -139,11 +221,12 @@ public class StreamResource {
 	}
 
 	@GET
+	@Path("/{stream_name}")
 	@ApiOperation(value = "Retrieve the stream.", notes = "TBD")
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public Object doGet(
+	public Object doGetStream(
 			@PathParam("stream_name") 					final String streamName,
 			@QueryParam("http_streaming") 				final boolean isHttpStreaming,
 			@QueryParam("start_time") 					final String startTime, 
@@ -239,11 +322,12 @@ public class StreamResource {
 
 
 	@DELETE
+	@Path("/{stream_name}")
 	@ApiOperation(value = "Delete a stream.", notes = "TBD")
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public ResponseMsg doDelete(
+	public ResponseMsg doDeleteStream(
 			@PathParam("stream_name") 	String streamName,
 			@QueryParam("start_time") 	String startTime, 
 			@QueryParam("end_time") 	String endTime) {

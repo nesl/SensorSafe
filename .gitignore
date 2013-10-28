@@ -1,8 +1,8 @@
 target/
+.swp
+.trc
+.phd
 .classpath
 .project
 .settings/
 tmp/
-.swp
-.trc
-.phd

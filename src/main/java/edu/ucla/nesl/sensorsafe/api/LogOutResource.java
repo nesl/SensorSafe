@@ -13,7 +13,7 @@ import com.wordnik.swagger.annotations.ApiResponses;
 @Path("logout")
 @Api(value = "logout", description = "Log out from current account.")
 public class LogOutResource {
-
+	
 	@GET
     @ApiOperation(value = "Log out from current account.", notes = "TBD")
     @ApiResponses(value = {

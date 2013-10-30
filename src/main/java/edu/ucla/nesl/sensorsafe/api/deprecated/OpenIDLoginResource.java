@@ -19,6 +19,7 @@ import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path("openidlogin")
 public class OpenIDLoginResource {
+	
 	@Context 
 	private ServletContext context;
 

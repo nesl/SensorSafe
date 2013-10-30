@@ -17,8 +17,7 @@ import edu.ucla.nesl.sensorsafe.db.DatabaseDriver;
 
 abstract public class InformixDatabaseDriver implements DatabaseDriver {
 
-	private static final String INFORMIX_PROP_FILENAME = "informix_ds.prop";
-	private static final String INFORMIX_CPDS_PROP_FILENAME = "informix_cpds.prop";
+	private static final String INFORMIX_PROP_FILENAME = "/opt/jetty/etc/informix.prop";
 	private static final String INFORMIX_DS_NAME = "SensorsafePooledDataSource";
 	
 	protected static DataSource dataSource;
@@ -38,7 +37,7 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 			String CPDSName = ds.getDataSourceName();
 			if (CPDSName != null) {
 				IfxConnectionPoolDataSource cpds = new IfxConnectionPoolDataSource();
-				FileInputStream cpdsPropFile = new FileInputStream(INFORMIX_CPDS_PROP_FILENAME);
+				FileInputStream cpdsPropFile = new FileInputStream(INFORMIX_PROP_FILENAME);
 				cpds.readProperties(cpdsPropFile);
 				registry.rebind(CPDSName, cpds);		
 			}

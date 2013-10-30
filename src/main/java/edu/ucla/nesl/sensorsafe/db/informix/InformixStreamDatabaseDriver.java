@@ -36,6 +36,7 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -48,7 +49,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
 
-	private static final String BULK_LOAD_DATA_FILE_NAME = "tmp/bulkload_data";
+	private static final String BULK_LOAD_DATA_FILE_NAME = "bulkload_data";
 
 	private static final String SQL_DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss.SSSSS";
 	

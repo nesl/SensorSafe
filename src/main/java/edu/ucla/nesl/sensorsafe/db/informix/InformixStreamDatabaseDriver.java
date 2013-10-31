@@ -4,6 +4,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -17,6 +18,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import javax.naming.NamingException;
 
 import net.minidev.json.JSONArray;
@@ -49,7 +52,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
 
-	private static final String BULK_LOAD_DATA_FILE_NAME = "bulkload_data";
+	private static final String BULK_LOAD_DATA_FILE_NAME_PREFIX = "/tmp/bulkload_data_";
 
 	private static final String SQL_DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss.SSSSS";
 	
@@ -1071,12 +1074,20 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		return returnFmt;
 	}
 	
-	private void makeStringValidBulkloadFile(String data, String fileName) throws IOException {
+	private String generateRandomKey() throws NoSuchAlgorithmException {
+    	KeyGenerator keygenerator = KeyGenerator.getInstance("AES");
+        SecretKey myDesKey = keygenerator.generateKey();
+    	return myDesKey.getEncoded().toString().split("@")[1];
+	}
+	
+	private File makeStringValidBulkloadFile(String data) throws IOException, NoSuchAlgorithmException {
 		FileWriter fw = null;
 		BufferedWriter bw = null;
+		File file = null;
 		
 		try {
-			File file = new File(fileName);
+			String fileName = BULK_LOAD_DATA_FILE_NAME_PREFIX + generateRandomKey();
+			file = new File(fileName);
 			if (file.exists()) {
 				file.delete();				
 			}
@@ -1119,20 +1130,22 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			if (fw != null)
 				fw.close();
 		}
+		
+		return file;
 	}
 	
 	@Override
-	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException {
+	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException, NoSuchAlgorithmException {
 		PreparedStatement pstmt = null;
 		try {
-			makeStringValidBulkloadFile(data, BULK_LOAD_DATA_FILE_NAME);
-			File file = new File(BULK_LOAD_DATA_FILE_NAME);
+			File file = makeStringValidBulkloadFile(data);
 			Stream stream = getStreamInfo(owner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
 			pstmt = conn.prepareStatement("UPDATE " + prefix + "streams SET tuples = BulkLoad(tuples, ?) WHERE id = ?");
 			pstmt.setString(1, file.getAbsolutePath());
 			pstmt.setInt(2, stream.id);
 			pstmt.executeUpdate();
+			file.delete();
 		} finally {
 			if (pstmt != null) 
 				pstmt.close();

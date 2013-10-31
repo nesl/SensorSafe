@@ -30,6 +30,8 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 	
 	public static void initializeConnectionPool() throws SQLException, IOException, NamingException {
 		if (dataSource == null) {
+			System.setProperty(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.fscontext.RefFSContextFactory");
+			System.setProperty(Context.PROVIDER_URL, "file:/tmp");
 			Context registry = new InitialContext();
 			IfxDataSource ds = new IfxDataSource();
 			FileInputStream dsPropFile = new FileInputStream(INFORMIX_PROP_FILENAME);

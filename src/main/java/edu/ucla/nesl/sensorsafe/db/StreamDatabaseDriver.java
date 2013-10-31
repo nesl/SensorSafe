@@ -1,6 +1,7 @@
 package edu.ucla.nesl.sensorsafe.db;
 
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -48,7 +49,7 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 
 	public void deleteRule(String remoteUser, int id) throws SQLException;
 
-	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException;
+	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException, NoSuchAlgorithmException;
 
 	public JSONArray getNextJsonTuple() throws SQLException;
 

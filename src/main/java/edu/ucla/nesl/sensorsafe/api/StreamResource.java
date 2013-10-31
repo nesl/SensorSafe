@@ -2,6 +2,7 @@ package edu.ucla.nesl.sensorsafe.api;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -158,7 +159,7 @@ public class StreamResource {
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 			db.bulkLoad(httpReq.getRemoteUser(), streamName, data);
-		} catch (SQLException | IOException | ClassNotFoundException | NamingException e) {
+		} catch (SQLException | IOException | ClassNotFoundException | NamingException | NoSuchAlgorithmException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
 			throw WebExceptionBuilder.buildBadRequest(e);

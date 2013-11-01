@@ -113,7 +113,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		PreparedStatement pstmt = null;
 		Connection conn = null;
 		try {
-			// Check if tables are there in database.
+			// Check if all tables are there in database.
 			conn = dataSource.getConnection();
 			String sql = "SELECT 1 FROM systables WHERE tabname=?";
 			pstmt = conn.prepareStatement(sql);
@@ -124,11 +124,12 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			}
 			pstmt.close();
 
-			// Add type map information
+			// Add type map information for calendars
 			Map<String, Class<?>> typeMap = conn.getTypeMap();
 			typeMap.put("calendarpattern", Class.forName("com.informix.timeseries.IfmxCalendarPattern"));
 			typeMap.put("calendar", Class.forName("com.informix.timeseries.IfmxCalendar"));
 
+			// Add type map informatio for rowtypes
 			sql = "SELECT channels FROM streams";
 			pstmt = conn.prepareStatement(sql);
 			rset = pstmt.executeQuery();
@@ -171,15 +172,20 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					+ "channels LIST(ROW(name VARCHAR(100),type VARCHAR(100)) NOT NULL), "
 					+ "UNIQUE (owner, name) CONSTRAINT owner_stream_name);");
 
-			String sql = "CREATE TABLE rules ("
+			stmt.execute("CREATE TABLE rules ("
 					+ "id SERIAL PRIMARY KEY NOT NULL, "
 					+ "owner VARCHAR(100) NOT NULL, "
 					+ "target_users SET(VARCHAR(100) NOT NULL), "
 					+ "target_streams SET(VARCHAR(100) NOT NULL), "
 					+ "condition VARCHAR(255), "
-					+ "action VARCHAR(255) NOT NULL);";
-			stmt.execute(sql);
+					+ "action VARCHAR(255) NOT NULL);");
 
+			stmt.execute("CREATE TABLE macros ("
+					+ "id SERIAL PRIMARY KEY NOT NULL, "
+					+ "owner VARCHAR(100) NOT NULL, "
+					+ "macro_name VARCHAR(255) NOT NULL, "
+					+ "macro_value VARCHAR(255) NOT NULL);");
+			
 			// Test
 			/*stmt.executeUpdate("INSERT INTO streams VALUES (1, 'test', 'tags', LIST{ROW('acc_x', 'float'), ROW('acc_y', 'float')});");
 
@@ -733,6 +739,16 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		return filter;
 	}
 	
+	private String convertDateTimePartExpression(String sql) {
+		sql = sql.replace("SECOND(timestamp)", DATETIME_SECOND);
+		sql = sql.replace("second(timestamp)", DATETIME_SECOND);
+		sql = sql.replace("MINUTE(timestamp)", DATETIME_MINUTE);
+		sql = sql.replace("minute(timestamp)", DATETIME_MINUTE);
+		sql = sql.replace("HOUR(timestamp)", DATETIME_HOUR);
+		sql = sql.replace("hour(timestamp)", DATETIME_HOUR);
+		return sql;
+	}
+	
 	public void prepareQueryStream(String owner, 
 			String streamName, 
 			String startTime, 
@@ -771,12 +787,11 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			sql += " * FROM " + prefix + "vtable " + "WHERE id = ?"; 
 
 			if (startTs != null) 
-				sql += " AND timestamp>=?";
+				sql += " AND timestamp >= ?";
 			if (endTs != null)
-				sql += " AND timestamp<=?";
+				sql += " AND timestamp <= ?";
 			if (filter != null) {
 				filter = processCronTimeExpression(filter);
-				Log.info(filter);
 				sql += " AND ( " + filter + " )";
 			}
 			// TODO find out requesting user name.
@@ -784,7 +799,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
-
+			sql = convertDateTimePartExpression(sql);
+			
 			pstmt = conn.prepareStatement(sql);
 			int i = 1;
 			if (offset > 0) {

@@ -17,7 +17,7 @@ import edu.ucla.nesl.sensorsafe.db.DatabaseDriver;
 
 abstract public class InformixDatabaseDriver implements DatabaseDriver {
 
-	private static final String INFORMIX_PROP_FILENAME = "/opt/jetty/etc/informix.prop";
+	private static final String INFORMIX_PROP_FILENAME = "/opt/jetty/etc/informix-sensorsafe.prop";
 	private static final String INFORMIX_DS_NAME = "SensorsafePooledDataSource";
 	
 	protected static DataSource dataSource;

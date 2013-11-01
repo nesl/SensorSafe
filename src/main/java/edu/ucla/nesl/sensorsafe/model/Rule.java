@@ -10,7 +10,7 @@ import javax.xml.bind.annotation.XmlRootElement;
 import com.wordnik.swagger.annotations.ApiModel;
 import com.wordnik.swagger.annotations.ApiModelProperty;
 
-@ApiModel(value = "Rule definition.")
+@ApiModel(value = "Rule")
 @XmlRootElement(name = "rule")
 public class Rule {
 	

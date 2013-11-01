@@ -9,16 +9,16 @@ import net.minidev.json.JSONArray;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 
+import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.Rule;
-import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
 
 public interface StreamDatabaseDriver extends DatabaseDriver {
 	
-	public RuleCollection getRules(String owner) 
+	public List<Rule> getRules(String owner) 
 			throws SQLException;
 	
-	public void storeRule(String owner, Rule rule) 
+	public void addRule(String owner, Rule rule) 
 			throws SQLException;
 	
 	public void deleteAllRules(String owner) 
@@ -56,4 +56,12 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void queryStreamTest(String remoteUser, String streamName,
 			String startTime, String endTime, String filter, int limit,
 			int offset) throws SQLException;
+
+	public void addOrUpdateMacro(String owner, Macro macro) throws SQLException;
+
+	public List<Macro> getMacros(String owner) throws SQLException;
+
+	public void deleteAllMacros(String owner) throws SQLException;
+
+	public void deleteMacro(String owner, int id, String name) throws SQLException;
 }

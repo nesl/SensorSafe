@@ -39,8 +39,8 @@ import com.informix.timeseries.IfmxTimeSeries;
 
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.Channel;
+import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.Rule;
-import edu.ucla.nesl.sensorsafe.model.RuleCollection;
 import edu.ucla.nesl.sensorsafe.model.Stream;
 import edu.ucla.nesl.sensorsafe.tools.Log;
 
@@ -53,8 +53,10 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 	private static final String ORIGIN_TIMESTAMP = "2000-01-01 00:00:00.00000";
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
+	
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
-	private static final String MSG_INVALID_CRON_EXPRESSION = "Invalid cron expression. Expects [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6) ]";
+	private static final String MSG_INVALID_CRON_EXPRESSION = "Invalid cron expression. Expects [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]";
+	
 	private static final String DATETIME_SECOND = "timestamp::DATETIME SECOND TO SECOND::CHAR(2)::INT";
 	private static final String DATETIME_MINUTE = "timestamp::DATETIME MINUTE TO MINUTE::CHAR(2)::INT";
 	private static final String DATETIME_HOUR = "timestamp::DATETIME HOUR TO HOUR::CHAR(2)::INT";
@@ -111,17 +113,48 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 	public static void initializeDatabase() throws SQLException, ClassNotFoundException {
 		PreparedStatement pstmt = null;
+		Statement stmt = null;
 		Connection conn = null;
 		try {
 			// Check if all tables are there in database.
 			conn = dataSource.getConnection();
+			
+			// Check calendars
+			stmt = conn.createStatement();
+			ResultSet rset = stmt.executeQuery("SELECT cp_name FROM CalendarPatterns WHERE cp_name = 'every_sec';");
+			if (!rset.next()) {
+				stmt.execute("INSERT INTO CalendarPatterns VALUES('every_sec', '{1 on}, second');");
+			}
+			rset = stmt.executeQuery("SELECT c_name, c_calendar FROM CalendarTable WHERE c_name = 'sec_cal';");
+			if (!rset.next()) {
+				stmt.execute("INSERT INTO CalendarTable(c_name, c_calendar) VALUES ('sec_cal', 'startdate(1753-01-01 00:00:00.00000), pattname(every_sec)');");
+			}
+
+			stmt.close();
+			
+			// Check streams table
 			String sql = "SELECT 1 FROM systables WHERE tabname=?";
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, "streams");
-			ResultSet rset = pstmt.executeQuery();
+			rset = pstmt.executeQuery();
 			if (!rset.next()) {
-				initializeTables();
+				createStreamsTable();
 			}
+			
+			// Check rules table
+			pstmt.setString(1, "rules");
+			rset = pstmt.executeQuery();
+			if (!rset.next()) {
+				createRulesTable();
+			}
+
+			// Check macros table
+			pstmt.setString(1, "macros");
+			rset = pstmt.executeQuery();
+			if (!rset.next()) {
+				createMacrosTable();
+			}
+
 			pstmt.close();
 
 			// Add type map information for calendars
@@ -129,7 +162,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			typeMap.put("calendarpattern", Class.forName("com.informix.timeseries.IfmxCalendarPattern"));
 			typeMap.put("calendar", Class.forName("com.informix.timeseries.IfmxCalendar"));
 
-			// Add type map informatio for rowtypes
+			// Add type map information for row types
 			sql = "SELECT channels FROM streams";
 			pstmt = conn.prepareStatement(sql);
 			rset = pstmt.executeQuery();
@@ -143,13 +176,15 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
+			if (stmt != null) 
+				stmt.close();
 			if (conn != null)
 				conn.close();
 		}
 
 	}
 
-	private static void initializeTables() throws SQLException, ClassNotFoundException {
+	private static void createStreamsTable() throws SQLException {
 
 		Statement stmt = null;
 		Connection conn = null;
@@ -157,13 +192,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			conn = dataSource.getConnection();
 			stmt = conn.createStatement();
 
-			// calendars
-			stmt.execute("DELETE FROM CalendarPatterns WHERE cp_name = 'every_sec';");
-			stmt.execute("DELETE FROM CalendarTable WHERE c_name = 'sec_cal';");
-			stmt.execute("INSERT INTO CalendarPatterns VALUES('every_sec', '{1 on}, second');");
-			stmt.execute("INSERT INTO CalendarTable(c_name, c_calendar) VALUES ('sec_cal', 'startdate(1753-01-01 00:00:00.00000), pattname(every_sec)');");
-
-			// tables
 			stmt.execute("CREATE TABLE streams ("
 					+ "id SERIAL PRIMARY KEY NOT NULL, "
 					+ "owner VARCHAR(100) NOT NULL, "
@@ -171,7 +199,22 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					+ "tags VARCHAR(255), "
 					+ "channels LIST(ROW(name VARCHAR(100),type VARCHAR(100)) NOT NULL), "
 					+ "UNIQUE (owner, name) CONSTRAINT owner_stream_name);");
+		} 
+		finally {
+			if (stmt != null)
+				stmt.close();
+			if (conn != null)
+				conn.close();
+		}
+	}
 
+	private static void createRulesTable() throws SQLException {
+
+		Statement stmt = null;
+		Connection conn = null;
+		try {
+			conn = dataSource.getConnection();
+			stmt = conn.createStatement();
 			stmt.execute("CREATE TABLE rules ("
 					+ "id SERIAL PRIMARY KEY NOT NULL, "
 					+ "owner VARCHAR(100) NOT NULL, "
@@ -179,26 +222,27 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					+ "target_streams SET(VARCHAR(100) NOT NULL), "
 					+ "condition VARCHAR(255), "
 					+ "action VARCHAR(255) NOT NULL);");
+		} 
+		finally {
+			if (stmt != null)
+				stmt.close();
+			if (conn != null)
+				conn.close();
+		}
+	}
 
+	private static void createMacrosTable() throws SQLException {
+
+		Statement stmt = null;
+		Connection conn = null;
+		try {
+			conn = dataSource.getConnection();
+			stmt = conn.createStatement();
 			stmt.execute("CREATE TABLE macros ("
 					+ "id SERIAL PRIMARY KEY NOT NULL, "
 					+ "owner VARCHAR(100) NOT NULL, "
 					+ "macro_name VARCHAR(255) NOT NULL, "
 					+ "macro_value VARCHAR(255) NOT NULL);");
-			
-			// Test
-			/*stmt.executeUpdate("INSERT INTO streams VALUES (1, 'test', 'tags', LIST{ROW('acc_x', 'float'), ROW('acc_y', 'float')});");
-
-            ResultSet rset = stmt.executeQuery("SELECT channels FROM streams");
-            rset.next();
-            Array sqlArr = rset.getArray(1);
-            Object[] arr = (Object[])sqlArr.getArray();
-            for (Object obj: arr) {
-            	Struct struct = (Struct)obj;
-            	Object[] attr = struct.getAttributes();
-            	Log.info((String)attr[0]);
-            	Log.info((String)attr[1]);
-            }*/
 		} 
 		finally {
 			if (stmt != null)
@@ -228,22 +272,21 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public RuleCollection getRules(String owner) throws SQLException {
+	public List<Rule> getRules(String owner) throws SQLException {
 		PreparedStatement pstmt = null;
-		RuleCollection rules = new RuleCollection();
+		List<Rule> rules = new ArrayList<Rule>();
 		try {
 			String sql = "SELECT id, target_users, target_streams, condition, action FROM rules WHERE owner = ?";
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, owner);
 			ResultSet rset = pstmt.executeQuery();
-			rules.rules = new LinkedList<Rule>();
 			while (rset.next()) {
 				int id = rset.getInt(1);
 				Array sqlArr = rset.getArray(2);
 				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
 				sqlArr = rset.getArray(3);
 				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
-				rules.rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5)));
+				rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5)));
 			}
 		} finally {
 			if (pstmt != null)
@@ -253,7 +296,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public void storeRule(String owner, Rule rule) throws SQLException {
+	public void addRule(String owner, Rule rule) throws SQLException {
 		PreparedStatement pstmt = null;
 		String targetUsers = null;
 		if (rule.targetUsers != null) {
@@ -695,7 +738,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	private String processCronTimeExpression(String filter) {
-		Pattern cronExprPattern = Pattern.compile("\\[[\\d\\s-\\*]+\\]");
+		Pattern cronExprPattern = Pattern.compile("\\[[\\d\\s-,\\*]+\\]");
 		Matcher matcher = cronExprPattern.matcher(filter);
 		while (matcher.find()) {
 			String cronStr = matcher.group();
@@ -716,26 +759,31 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					i++;
 					continue;
 				}
-				String[] cronSplit = cron.split("-"); 
-				if (cronSplit.length != 1 && cronSplit.length != 2) 
+				
+				String[] cronSplit;
+				if (cron.contains("-")) {
+					cronSplit = cron.split("-");
+					if (cronSplit.length != 2) 
 						throw new IllegalArgumentException(MSG_INVALID_CRON_EXPRESSION);
-
-				if (cronSplit.length == 1) {
-					sqlExpr += SQL_DATETIME_CONVERSIONS[i] + " = " + cron;
-				} else if (cronSplit.length == 2) {
 					sqlExpr += "( " + SQL_DATETIME_CONVERSIONS[i] + " >= " + cronSplit[0] + " AND " + SQL_DATETIME_CONVERSIONS[i] + " <= " + cronSplit[1] + " )";
+				} else if (cron.contains(",")) {
+					cronSplit = cron.split(",");
+					sqlExpr += "( ";
+					for (String number : cronSplit) {
+						sqlExpr += SQL_DATETIME_CONVERSIONS[i] + " = " + number + " OR "; 
+					}
+					sqlExpr = sqlExpr.substring(0, sqlExpr.length() - 4) + " )";
 				} else {
-					assert false;
+					sqlExpr += SQL_DATETIME_CONVERSIONS[i] + " = " + cron;
 				}
-				
 				sqlExpr += " AND ";
-				
 				i++;
 			}
 			sqlExpr = sqlExpr.substring(0, sqlExpr.length() - 5);
 			sqlExpr += " )";
 			filter = filter.replace(cronStr, sqlExpr);
 		}
+		Log.info(filter);
 		return filter;
 	}
 	
@@ -1242,9 +1290,15 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public void queryStreamTest(String owner, String streamName,
-			String startTime, String endTime, String filter, int limit,
+	public void queryStreamTest(
+			String owner, 
+			String streamName,
+			String startTime, 
+			String endTime, 
+			String filter, 
+			int limit,
 			int offset) throws SQLException {
+		
 		// Check if stream name exists.
 		if ( !isStreamNameExist(owner, streamName) )
 			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
@@ -1301,5 +1355,101 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
+	@Override
+	public void addOrUpdateMacro(String owner, Macro macro) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			String sql = "SELECT macro_name FROM macros WHERE macro_name = ?;";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, macro.name);
+			ResultSet rset = pstmt.executeQuery();
+			if (rset.next()) {
+				pstmt.close();
+				sql = "UPDATE macros SET macro_value = ? WHERE macro_name = ?;";
+				pstmt = conn.prepareStatement(sql);
+				pstmt.setString(1, macro.value);
+				pstmt.setString(2, macro.name);
+				pstmt.executeUpdate();
+			} else {
+				pstmt.close();
+				sql = "INSERT INTO macros (owner, macro_name, macro_value) VALUES (?,?,?);";
+				pstmt = conn.prepareStatement(sql);
+				pstmt.setString(1, owner);
+				pstmt.setString(2, macro.name);
+				pstmt.setString(3, macro.value);
+				pstmt.executeUpdate();
+			}
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+	}
+	
+	@Override
+	public List<Macro> getMacros(String owner) throws SQLException {
+		List<Macro> macros = new ArrayList<Macro>();
+		
+		PreparedStatement pstmt = null;
+		try {
+			String sql = "SELECT macro_name, macro_value, id FROM macros WHERE owner = ?;";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, owner);
+			ResultSet rset = pstmt.executeQuery();
+			while (rset.next()) {
+				macros.add(new Macro(rset.getString(1), rset.getString(2), rset.getInt(3)));
+			}
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+		
+		return macros;
+	}
+	
+	@Override
+	public void deleteAllMacros(String owner) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			pstmt = conn.prepareStatement("DELETE FROM macros WHERE owner = ?");
+			pstmt.setString(1, owner);
+			pstmt.executeUpdate();
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+	}
 
+	@Override
+	public void deleteMacro(String owner, int id, String name) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			String sql = "DELETE FROM macros WHERE owner = ?";
+			
+			if (id > 0) {
+				sql += " AND id = ?";
+			}
+			if (name != null) {
+				sql += " AND macro_name = ?";
+			}
+			
+			pstmt = conn.prepareStatement(sql);
+			
+			pstmt.setString(1, owner);
+			
+			int i = 2;
+			if (id > 0) {
+				pstmt.setInt(i, id);
+				i++;
+			}
+			if (name != null) {
+				pstmt.setString(i, name);
+				i++;
+			}
+			
+			pstmt.executeUpdate();
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+	}
 }

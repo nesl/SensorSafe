@@ -42,7 +42,6 @@ import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.model.StreamCollection;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path("/streams")
@@ -60,13 +59,12 @@ public class StreamResource {
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public StreamCollection doGetAllStreams() {    	
-		StreamCollection streamCollection;
+	public List<Stream> doGetAllStreams() {    	
+		List<Stream> streams = null;
 		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			List<Stream> streams = db.getStreamList(httpReq.getRemoteUser());
-			streamCollection = new StreamCollection(streams);
+			streams = db.getStreamList(httpReq.getRemoteUser());			
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -78,7 +76,7 @@ public class StreamResource {
 				}
 			}
 		}
-		return streamCollection;
+		return streams;
 	}
 
 	@POST
@@ -233,7 +231,14 @@ public class StreamResource {
 			@PathParam("stream_name") 					final String streamName,
 			@QueryParam("http_streaming") 				final boolean isHttpStreaming,
 			@QueryParam("start_time") 					final String startTime, 
-			@QueryParam("end_time") 					final String endTime, 
+			@QueryParam("end_time") 					final String endTime,
+			@ApiParam(name = "filter", 
+				value = "Any SQL expression on timestamp and channel names.<br><br>"
+						+ "Additional expressions supported:<br><br>"
+						+ "- Cron time in [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]:<br>"
+						+ "  e.g., [ * * 9-18 * * 1-5 ]<br><br>"
+						+ "- SQL date time part SECOND, MINUTE, HOUR, DAY, MONTH, WEEKDAY(0-6 Sun-Sat), YEAR:<br>"
+						+ "  e.g., WEEKDAY(timestamp)<br><br>")
 			@QueryParam("filter") 						final String filter,
 			@ApiParam(name = "function", value = "WIP. Query test function.")  
 			@QueryParam("function") 					final String function ,

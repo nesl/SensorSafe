@@ -18,7 +18,7 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public List<Rule> getRules(String owner) 
 			throws SQLException;
 	
-	public void addRule(String owner, Rule rule) 
+	public void addOrUpdateRule(String owner, Rule rule) 
 			throws SQLException;
 	
 	public void deleteAllRules(String owner) 

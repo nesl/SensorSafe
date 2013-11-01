@@ -296,7 +296,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public void addRule(String owner, Rule rule) throws SQLException {
+	public void addOrUpdateRule(String owner, Rule rule) throws SQLException {
 		PreparedStatement pstmt = null;
 		String targetUsers = null;
 		if (rule.targetUsers != null) {
@@ -783,7 +783,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			sqlExpr += " )";
 			filter = filter.replace(cronStr, sqlExpr);
 		}
-		Log.info(filter);
 		return filter;
 	}
 	
@@ -795,6 +794,25 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		sql = sql.replace("HOUR(timestamp)", DATETIME_HOUR);
 		sql = sql.replace("hour(timestamp)", DATETIME_HOUR);
 		return sql;
+	}
+	
+	private String convertMacros(String owner, String filter) throws SQLException {
+		PreparedStatement pstmt = null;
+		
+		try {
+			pstmt = conn.prepareStatement("SELECT macro_name, macro_value FROM macros WHERE owner = ?;");
+			pstmt.setString(1, owner);
+			ResultSet rset = pstmt.executeQuery();
+			while (rset.next()) {
+				filter = filter.replace(rset.getString(1), rset.getString(2));
+			}
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		}
+		
+		return filter;
 	}
 	
 	public void prepareQueryStream(String owner, 
@@ -839,15 +857,19 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			if (endTs != null)
 				sql += " AND timestamp <= ?";
 			if (filter != null) {
+				filter = convertMacros(owner, filter);
 				filter = processCronTimeExpression(filter);
 				sql += " AND ( " + filter + " )";
 			}
+			
 			// TODO find out requesting user name.
 			sql = applyRules(null, sql, stream);
 
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
 			sql = convertDateTimePartExpression(sql);
+			
+			Log.info(sql);
 			
 			pstmt = conn.prepareStatement(sql);
 			int i = 1;

@@ -64,7 +64,7 @@ public class RuleResource {
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
-    @ApiOperation(value = "Create a new rule", notes = "TBD")
+    @ApiOperation(value = "Add or update a rule", notes = "TBD")
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
@@ -72,7 +72,7 @@ public class RuleResource {
     	StreamDatabaseDriver db = null;
     	try {
     		db = DatabaseConnector.getStreamDatabase();
-    		db.addRule(httpReq.getRemoteUser(), rule);
+    		db.addOrUpdateRule(httpReq.getRemoteUser(), rule);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -85,7 +85,7 @@ public class RuleResource {
 			}
 		}
     	
-    	return new ResponseMsg("Sucessfully added the rule.");
+    	return new ResponseMsg("Sucessfully added/updated the rule.");
     }
     
     @DELETE

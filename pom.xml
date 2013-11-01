@@ -40,6 +40,11 @@
 				</configuration>
 				<dependencies>
 					<dependency>
+						<groupId>com.sun.messaging.mq</groupId>
+						<artifactId>fscontext</artifactId>
+						<version>4.2</version>
+					</dependency>
+					<dependency>
 						<groupId>com.informix.jdbc</groupId>
 						<artifactId>informix-jdbc-driver</artifactId>
 						<version>3.70JC7</version>

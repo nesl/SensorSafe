@@ -19,7 +19,7 @@ public class SensorSafeServletContext implements ServletContextListener {
 		Log.info("SensorSafe is starting up...");
 		try {
 			InformixDatabaseDriver.initializeConnectionPool();
-			InformixUserDatabaseDriver.initializeDatabase();
+			//InformixUserDatabaseDriver.initializeDatabase();
 			InformixStreamDatabaseDriver.initializeDatabase();
 		} catch (SQLException | IOException | NamingException | ClassNotFoundException e) {
 			e.printStackTrace();

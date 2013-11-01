@@ -13,10 +13,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -51,10 +54,20 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	private static final String ORIGIN_TIMESTAMP = "2000-01-01 00:00:00.00000";
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
-
+	private static final String MSG_INVALID_CRON_EXPRESSION = "Invalid cron expression. Expects [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6) ]";
+	private static final String DATETIME_SECOND = "timestamp::DATETIME SECOND TO SECOND::CHAR(2)::INT";
+	private static final String DATETIME_MINUTE = "timestamp::DATETIME MINUTE TO MINUTE::CHAR(2)::INT";
+	private static final String DATETIME_HOUR = "timestamp::DATETIME HOUR TO HOUR::CHAR(2)::INT";
+	private static final String DATETIME_DAY = "DAY(timestamp)";
+	private static final String DATETIME_MONTH = "MONTH(timestamp)";
+	private static final String DATETIME_WEEKDAY = "WEEKDAY(timestamp)";
+	private static final String DATETIME_YEAR = "YEAR(timestamp)";
+	private static final String[] SQL_DATETIME_CONVERSIONS = { DATETIME_SECOND, DATETIME_MINUTE, DATETIME_HOUR, DATETIME_DAY, DATETIME_MONTH, DATETIME_WEEKDAY, DATETIME_YEAR };
+	
 	private static final String BULK_LOAD_DATA_FILE_NAME_PREFIX = "/tmp/bulkload_data_";
 
-	private static final String SQL_DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss.SSSSS";
+	private static final String SQL_DATE_TIME_PATTERN_WITH_FRACTION = "yyyy-MM-dd HH:mm:ss.SSSSS";
+	private static final String SQL_DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 	
 	private PreparedStatement storedPstmt;
 	private ResultSet storedResultSet;
@@ -675,11 +688,56 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
+	private String processCronTimeExpression(String filter) {
+		Pattern cronExprPattern = Pattern.compile("\\[[\\d\\s-\\*]+\\]");
+		Matcher matcher = cronExprPattern.matcher(filter);
+		while (matcher.find()) {
+			String cronStr = matcher.group();
+			String[] cronComponents = cronStr.split("[\\s\\[\\]]");
+			List<String> cronComList = new ArrayList<String>();
+			for (String str : cronComponents) {
+				if (str.length() > 0) 
+					cronComList.add(str);
+			}
+			if (cronComList.size() != 6) {
+				throw new IllegalArgumentException(MSG_INVALID_CRON_EXPRESSION);
+			}
+			
+			int i = 0;
+			String sqlExpr = "( ";
+			for (String cron : cronComList) {
+				if (cron.equals("*")) {
+					i++;
+					continue;
+				}
+				String[] cronSplit = cron.split("-"); 
+				if (cronSplit.length != 1 && cronSplit.length != 2) 
+						throw new IllegalArgumentException(MSG_INVALID_CRON_EXPRESSION);
+
+				if (cronSplit.length == 1) {
+					sqlExpr += SQL_DATETIME_CONVERSIONS[i] + " = " + cron;
+				} else if (cronSplit.length == 2) {
+					sqlExpr += "( " + SQL_DATETIME_CONVERSIONS[i] + " >= " + cronSplit[0] + " AND " + SQL_DATETIME_CONVERSIONS[i] + " <= " + cronSplit[1] + " )";
+				} else {
+					assert false;
+				}
+				
+				sqlExpr += " AND ";
+				
+				i++;
+			}
+			sqlExpr = sqlExpr.substring(0, sqlExpr.length() - 5);
+			sqlExpr += " )";
+			filter = filter.replace(cronStr, sqlExpr);
+		}
+		return filter;
+	}
+	
 	public void prepareQueryStream(String owner, 
 			String streamName, 
 			String startTime, 
 			String endTime, 
-			String expr, 
+			String filter, 
 			int limit, int offset) 
 					throws SQLException {
 		// Check if stream name exists.
@@ -716,9 +774,11 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				sql += " AND timestamp>=?";
 			if (endTs != null)
 				sql += " AND timestamp<=?";
-			if (expr != null) 
-				sql += " AND ( " + expr + " )";
-
+			if (filter != null) {
+				filter = processCronTimeExpression(filter);
+				Log.info(filter);
+				sql += " AND ( " + filter + " )";
+			}
 			// TODO find out requesting user name.
 			sql = applyRules(null, sql, stream);
 
@@ -891,20 +951,22 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	}
 
 	@Override
-	public Stream getStreamInfo(String owner, String name) throws SQLException {
+	public Stream getStreamInfo(String owner, String streamName) throws SQLException {
 		PreparedStatement pstmt = null;
 		Stream stream = null;
 		try {
 			String sql = "SELECT tags, channels, id FROM streams WHERE owner = ? AND name = ?";
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, owner);
-			pstmt.setString(2, name);
+			pstmt.setString(2, streamName);
 			ResultSet rset = pstmt.executeQuery();
-			rset.next();
+			if (!rset.next()) {
+				throw new IllegalArgumentException("No such stream: " + streamName);
+			}
 			String tags = rset.getString(1);
 			List<Channel> channels = getListChannelFromSqlArray(rset.getArray(2));
 			int id = rset.getInt(3);
-			stream = new Stream(id, name, tags, channels);
+			stream = new Stream(id, streamName, tags, channels);
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
@@ -1039,29 +1101,40 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	private DateTimeFormatter findDateTimeFormat(String[] lines, String delimiter) {
 		DateTimeFormatter isoFmt = ISODateTimeFormat.dateTime();
 		DateTimeFormatter sqlFmt = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN);
+		DateTimeFormatter sqlFmtFraction = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN_WITH_FRACTION);
 		DateTimeFormatter returnFmt = null;
 		
 		String timestamp = lines[0].split(delimiter, 2)[0];
 		DateTime dt = null;
 		try {
-			dt = isoFmt.parseDateTime(timestamp);
-			returnFmt = isoFmt;
+			dt = sqlFmtFraction.parseDateTime(timestamp);
+			returnFmt = sqlFmtFraction;
 		} catch (IllegalArgumentException e) {
 			try {
-				dt = sqlFmt.parseDateTime(timestamp);
-				returnFmt = sqlFmt;
+				dt = isoFmt.parseDateTime(timestamp);
+				returnFmt = isoFmt;
 			} catch (IllegalArgumentException e1) {
-				// If first line fails, try for 2nd line because CSV file might have header line.
-				lines[0] = null;
-				timestamp = lines[1].split(delimiter, 2)[0];
 				try {
-					dt = isoFmt.parseDateTime(timestamp);
-					returnFmt = isoFmt;
+					dt = sqlFmt.parseDateTime(timestamp);
+					returnFmt = sqlFmt;
 				} catch (IllegalArgumentException e2) {
+					// If first line fails, try for 2nd line because CSV file might have header line.
+					lines[0] = null;
+					timestamp = lines[1].split(delimiter, 2)[0];
 					try {
-						dt = sqlFmt.parseDateTime(timestamp);
-						returnFmt = sqlFmt;
+						dt = sqlFmtFraction.parseDateTime(timestamp);
+						returnFmt = sqlFmtFraction;
 					} catch (IllegalArgumentException e3) {
+						try {
+							dt = isoFmt.parseDateTime(timestamp);
+							returnFmt = isoFmt;
+						} catch (IllegalArgumentException e4) {
+							try {
+								dt = sqlFmt.parseDateTime(timestamp);
+								returnFmt = sqlFmt;
+							} catch (IllegalArgumentException e5) {
+							}
+						}
 					}
 				}
 			}

@@ -737,9 +737,9 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
-	private String processCronTimeExpression(String filter) {
+	private String processCronTimeExpression(String expr) {
 		Pattern cronExprPattern = Pattern.compile("\\[[\\d\\s-,\\*]+\\]");
-		Matcher matcher = cronExprPattern.matcher(filter);
+		Matcher matcher = cronExprPattern.matcher(expr);
 		while (matcher.find()) {
 			String cronStr = matcher.group();
 			String[] cronComponents = cronStr.split("[\\s\\[\\]]");
@@ -781,22 +781,22 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			}
 			sqlExpr = sqlExpr.substring(0, sqlExpr.length() - 5);
 			sqlExpr += " )";
-			filter = filter.replace(cronStr, sqlExpr);
+			expr = expr.replace(cronStr, sqlExpr);
 		}
-		return filter;
+		return expr;
 	}
 	
-	private String convertDateTimePartExpression(String sql) {
-		sql = sql.replace("SECOND(timestamp)", DATETIME_SECOND);
-		sql = sql.replace("second(timestamp)", DATETIME_SECOND);
-		sql = sql.replace("MINUTE(timestamp)", DATETIME_MINUTE);
-		sql = sql.replace("minute(timestamp)", DATETIME_MINUTE);
-		sql = sql.replace("HOUR(timestamp)", DATETIME_HOUR);
-		sql = sql.replace("hour(timestamp)", DATETIME_HOUR);
-		return sql;
+	private String convertDateTimePartExpression(String expr) {
+		expr = expr.replace("SECOND(timestamp)", DATETIME_SECOND);
+		expr = expr.replace("second(timestamp)", DATETIME_SECOND);
+		expr = expr.replace("MINUTE(timestamp)", DATETIME_MINUTE);
+		expr = expr.replace("minute(timestamp)", DATETIME_MINUTE);
+		expr = expr.replace("HOUR(timestamp)", DATETIME_HOUR);
+		expr = expr.replace("hour(timestamp)", DATETIME_HOUR);
+		return expr;
 	}
 	
-	private String convertMacros(String owner, String filter) throws SQLException {
+	private String convertMacros(String owner, String expr) throws SQLException {
 		PreparedStatement pstmt = null;
 		
 		try {
@@ -804,7 +804,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt.setString(1, owner);
 			ResultSet rset = pstmt.executeQuery();
 			while (rset.next()) {
-				filter = filter.replace(rset.getString(1), rset.getString(2));
+				expr = expr.replace(rset.getString(1), rset.getString(2));
 			}
 		} finally {
 			if (pstmt != null) {
@@ -812,24 +812,27 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			}
 		}
 		
-		return filter;
+		return expr;
 	}
 	
-	public void prepareQueryStream(String owner, 
+	public void prepareQuery(
+			String requestingUser,
+			String streamOwner, 
 			String streamName, 
 			String startTime, 
 			String endTime, 
 			String filter, 
-			int limit, int offset) 
-					throws SQLException {
+			int limit, 
+			int offset) 
+				throws SQLException {
+		
 		// Check if stream name exists.
-		if ( !isStreamNameExist(owner, streamName) )
-			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
+		if ( !isStreamNameExist(streamOwner, streamName) )
+			throw new IllegalArgumentException("Stream (" + streamName + ") of owner (" + streamOwner + ") does not exists.");
 
 		PreparedStatement pstmt = null;
-		//PreparedStatement countPstmt = null;
 		try {
-			Stream stream = getStreamInfo(owner, streamName);
+			Stream stream = getStreamInfo(streamOwner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
 
 			Timestamp startTs = null, endTs = null;
@@ -857,14 +860,14 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			if (endTs != null)
 				sql += " AND timestamp <= ?";
 			if (filter != null) {
-				filter = convertMacros(owner, filter);
-				filter = processCronTimeExpression(filter);
 				sql += " AND ( " + filter + " )";
 			}
 			
 			// TODO find out requesting user name.
-			sql = applyRules(null, sql, stream);
+			sql = applyRules(streamOwner, requestingUser, sql, stream);
 
+			sql = convertMacros(streamOwner, sql);
+			sql = processCronTimeExpression(sql);
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
 			sql = convertDateTimePartExpression(sql);
@@ -949,7 +952,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
-	private String applyRules(String requestingUser, String oriSql, Stream stream) throws SQLException {
+	private String applyRules(String streamOwner, String requestingUser, String oriSql, Stream stream) throws SQLException {
 		PreparedStatement pstmt = null;
 		String ruleCond = null;
 		try {
@@ -958,16 +961,17 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			String denyRuleCond = null;
 
 			if (requestingUser == null) 
-				sql = "SELECT condition FROM rules WHERE action = ? AND ( ? IN target_streams OR target_streams IS NULL )";
+				sql = "SELECT condition FROM rules WHERE owner = ? AND action = ? AND ( ? IN target_streams OR target_streams IS NULL )";
 			else
-				sql = "SELECT condition FROM rules WHERE action = ? AND ( ? IN target_streams OR target_streams IS NULL) AND ( ? IN target_users OR target_users IS NULL )";
+				sql = "SELECT condition FROM rules WHERE owner = ? AND action = ? AND ( ? IN target_streams OR target_streams IS NULL) AND ( ? IN target_users OR target_users IS NULL )";
 
 			// Process allow rules			
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, "allow");
-			pstmt.setString(2, stream.name);
+			pstmt.setString(1, streamOwner);
+			pstmt.setString(2, "allow");
+			pstmt.setString(3, stream.name);
 			if (requestingUser != null)
-				pstmt.setString(3, requestingUser);
+				pstmt.setString(4, requestingUser);
 			ResultSet rset = pstmt.executeQuery();
 			List<String> sqlFragList = new LinkedList<String>();
 			while (rset.next()) {
@@ -977,15 +981,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			if (sqlFragList.size() > 0)
 				allowRuleCond = "( " + StringUtils.join(sqlFragList, " OR ") + " )";
 
-			if (pstmt != null) 
-				pstmt.close();
-
 			// Process deny rules
-			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, "deny");
-			pstmt.setString(2, stream.name);
-			if (requestingUser != null)
-				pstmt.setString(3, requestingUser);
+			pstmt.setString(2, "deny");
 			rset = pstmt.executeQuery();
 			sqlFragList = new LinkedList<String>();
 			while (rset.next()) {
@@ -995,6 +992,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			if (sqlFragList.size() > 0)
 				denyRuleCond = "NOT ( " + StringUtils.join(sqlFragList, " OR ") + " )";
 
+			// Merge allow and deny rules.
 			if (allowRuleCond != null && denyRuleCond != null) 
 				ruleCond = allowRuleCond + " AND " + denyRuleCond;
 			else if (allowRuleCond == null && denyRuleCond != null)
@@ -1313,7 +1311,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 	@Override
 	public void queryStreamTest(
-			String owner, 
+			String requestingUser,
+			String streamOwner, 
 			String streamName,
 			String startTime, 
 			String endTime, 
@@ -1322,13 +1321,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			int offset) throws SQLException {
 		
 		// Check if stream name exists.
-		if ( !isStreamNameExist(owner, streamName) )
+		if ( !isStreamNameExist(streamOwner, streamName) )
 			throw new IllegalArgumentException("Stream name (" + streamName + ") does not exists.");
 
 		PreparedStatement pstmt = null;
 		//PreparedStatement countPstmt = null;
 		try {
-			Stream stream = getStreamInfo(owner, streamName);
+			Stream stream = getStreamInfo(streamOwner, streamName);
 			String prefix = getChannelFormatPrefix(stream.channels);
 
 			Timestamp startTs = null, endTs = null;

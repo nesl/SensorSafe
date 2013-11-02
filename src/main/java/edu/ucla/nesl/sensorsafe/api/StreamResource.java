@@ -229,6 +229,8 @@ public class StreamResource {
 	})
 	public Object doGetStream(
 			@PathParam("stream_name") 					final String streamName,
+			@ApiParam(name = "stream_owner", required = true)
+			@QueryParam("stream_owner")					final String streamOwner,
 			@QueryParam("http_streaming") 				final boolean isHttpStreaming,
 			@QueryParam("start_time") 					final String startTime, 
 			@QueryParam("end_time") 					final String endTime,
@@ -247,11 +249,12 @@ public class StreamResource {
 			@QueryParam("offset") 						final int offset) {
 
 		StreamDatabaseDriver db = null;
+		final String requestingUser = httpReq.getRemoteUser();
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 			if (function != null) {
 				if (function.equals("test")) {
-					db.queryStreamTest(httpReq.getRemoteUser(), streamName, startTime, endTime, filter, limit, offset);
+					db.queryStreamTest(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
 					return new ResponseMsg("Test function executed.");
 				} else {
 					throw WebExceptionBuilder.buildBadRequest("Unsupported function: " + function);
@@ -260,7 +263,7 @@ public class StreamResource {
 				if (!isHttpStreaming && limit > ROW_LIMIT_WITHOUT_HTTP_STREAMING) {
 					throw WebExceptionBuilder.buildBadRequest("Too mcuh data requested without HTTP streaming.");
 				}
-				Stream stream = db.getStreamInfo(httpReq.getRemoteUser(), streamName);
+				Stream stream = db.getStreamInfo(streamOwner, streamName);
 				ObjectMapper mapper = new ObjectMapper();
 				AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
 				mapper.setAnnotationIntrospector(introspector);
@@ -270,7 +273,7 @@ public class StreamResource {
 				strJson = strJson.substring(0, strJson.length() - 5) + "[";
 
 				if (!isHttpStreaming) {
-					db.prepareQueryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, filter, limit, offset);
+					db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
 					JSONArray tuple = db.getNextJsonTuple();
 					if (tuple != null) {
 						strJson += tuple.toString();
@@ -287,7 +290,7 @@ public class StreamResource {
 							StreamDatabaseDriver db = null;
 							try {
 								db = DatabaseConnector.getStreamDatabase();
-								db.prepareQueryStream(httpReq.getRemoteUser(), streamName, startTime, endTime, filter, limit, offset);
+								db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
 								IOUtils.write(strJsonOutput, output);
 								JSONArray tuple;
 								tuple = db.getNextJsonTuple();

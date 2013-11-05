@@ -6,6 +6,7 @@ import java.util.List;
 
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -33,7 +34,7 @@ public class AdminResource {
 
 	@Context 
 	private HttpServletRequest httpReq;
-
+	
 	@GET
     @ApiOperation(value = "List currently registered admins on this server.", notes = "TBD")
     @ApiResponses(value = {

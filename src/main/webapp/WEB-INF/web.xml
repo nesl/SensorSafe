@@ -7,16 +7,8 @@
 	metadata-complete="true" version="2.5">
 
 	<servlet>
-		<servlet-name>JerseyJaxrsConfig</servlet-name>
-		<servlet-class>com.wordnik.swagger.jersey.config.JerseyJaxrsConfig</servlet-class>
-		<init-param>
-			<param-name>api.version</param-name>
-			<param-value>1.0.0</param-value>
-		</init-param>
-		<init-param>
-			<param-name>swagger.api.basepath</param-name>
-			<param-value>https://128.97.93.251:8443/api</param-value>
-		</init-param>
+		<servlet-name>SensorSafeSwaggerConfig</servlet-name>
+		<servlet-class>edu.ucla.nesl.sensorsafe.SensorSafeSwaggerConfig</servlet-class>
 		<load-on-startup>1</load-on-startup>
 	</servlet>
 

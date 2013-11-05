@@ -34,7 +34,7 @@
 				<artifactId>jetty-maven-plugin</artifactId>
 				<version>9.1.0.M0</version>
 				<configuration>
-					<jettyXml>jetty.xml,jetty-ssl.xml,jetty-https.xml</jettyXml>
+					<jettyXml>jetty.xml,jetty-ssl.xml,jetty-https.xml,jetty-http.xml</jettyXml><!-- Order important! -->
 					<contextXml>jetty-context.xml</contextXml>
 					<scanIntervalSeconds>1</scanIntervalSeconds>
 				</configuration>

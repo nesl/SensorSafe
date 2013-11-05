@@ -1,24 +1,19 @@
 package edu.ucla.nesl.sensorsafe.db.informix;
 
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 
-import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
-
-import com.informix.jdbcx.IfxConnectionPoolDataSource;
-import com.informix.jdbcx.IfxDataSource;
 
 import edu.ucla.nesl.sensorsafe.db.DatabaseDriver;
 
 abstract public class InformixDatabaseDriver implements DatabaseDriver {
 
-	private static final String INFORMIX_PROP_FILENAME = "/opt/jetty/etc/informix-sensorsafe.prop";
-	private static final String INFORMIX_DS_NAME = "SensorsafePooledDataSource";
+	//private static final String INFORMIX_PROP_FILENAME = "/opt/jetty/etc/informix-sensoract.prop";
+	//private static final String INFORMIX_DS_NAME = "SensorsafePooledDataSource";
 	
 	protected static DataSource dataSource;
 
@@ -30,7 +25,12 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 	
 	public static void initializeConnectionPool() throws SQLException, IOException, NamingException {
 		if (dataSource == null) {
-			System.setProperty(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.fscontext.RefFSContextFactory");
+		
+			// DataSource should be configured at jetty.xml and WEB-INF/web.xml
+			InitialContext ic = new InitialContext();
+			dataSource = (DataSource) ic.lookup("java:comp/env/jdbc/informix-ds");
+			
+			/*System.setProperty(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.fscontext.RefFSContextFactory");
 			System.setProperty(Context.PROVIDER_URL, "file:/tmp");
 			Context registry = new InitialContext();
 			IfxDataSource ds = new IfxDataSource();
@@ -44,7 +44,7 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 				registry.rebind(CPDSName, cpds);		
 			}
 			registry.rebind(INFORMIX_DS_NAME, ds);
-			dataSource = (DataSource) registry.lookup(INFORMIX_DS_NAME);
+			dataSource = (DataSource) registry.lookup(INFORMIX_DS_NAME);*/
 		}
 	}
 	

@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 
 import javax.naming.NamingException;
 
@@ -12,13 +13,13 @@ import edu.ucla.nesl.sensorsafe.Const;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.User;
 
-public class InformixUserDatabaseDriver extends InformixDatabaseDriver implements UserDatabaseDriver {
+public class InformixUserDatabaseJDBCLoginDriver extends InformixDatabaseDriver implements UserDatabaseDriver {
 
-	public InformixUserDatabaseDriver() throws SQLException, IOException,
+	public InformixUserDatabaseJDBCLoginDriver() throws SQLException, IOException,
 			NamingException, ClassNotFoundException {
 		super();
-	}
-
+	}	
+	
 	public static void initializeDatabase() throws SQLException {
 		Connection conn = null;
 		PreparedStatement pstmt = null;
@@ -165,5 +166,23 @@ public class InformixUserDatabaseDriver extends InformixDatabaseDriver implement
 			if (pstmt != null) 
 				pstmt.close();
 		}
+	}
+
+	@Override
+	public List<User> getUsers() throws SQLException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public List<User> getOwners() throws SQLException {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public List<User> getAdmins() throws SQLException {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }

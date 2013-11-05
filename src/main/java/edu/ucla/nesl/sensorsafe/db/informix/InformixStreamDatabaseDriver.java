@@ -986,7 +986,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			rset = pstmt.executeQuery();
 			sqlFragList = new LinkedList<String>();
 			while (rset.next()) {
-				String condition = rset.getString(3);
+				String condition = rset.getString(1);
 				sqlFragList.add("( " + condition + " )"); 
 			}
 			if (sqlFragList.size() > 0)
@@ -1045,7 +1045,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt.setString(2, streamName);
 			ResultSet rset = pstmt.executeQuery();
 			if (!rset.next()) {
-				throw new IllegalArgumentException("No such stream: " + streamName);
+				throw new IllegalArgumentException("No such stream (" + streamName + ") of owner (" + owner + ")");
 			}
 			String tags = rset.getString(1);
 			List<Channel> channels = getListChannelFromSqlArray(rset.getArray(2));

@@ -6,7 +6,7 @@ import java.sql.SQLException;
 import javax.naming.NamingException;
 
 import edu.ucla.nesl.sensorsafe.db.informix.InformixStreamDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabaseDriver;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabaseDataSourceLoginDriver;
 
 public class DatabaseConnector {
 	public static StreamDatabaseDriver getStreamDatabase() throws ClassNotFoundException, SQLException, IOException, NamingException {
@@ -14,6 +14,6 @@ public class DatabaseConnector {
 	}
 	
 	public static UserDatabaseDriver getUserDatabase() throws ClassNotFoundException, SQLException, IOException, NamingException {
-		return new InformixUserDatabaseDriver();
+		return new InformixUserDatabaseDataSourceLoginDriver();
 	}
 }

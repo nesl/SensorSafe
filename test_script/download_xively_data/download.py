@@ -1,6 +1,7 @@
 import datetime
 import re
 from subprocess import call
+import sys 
 
 USER = "nesl_test"
 XIVELY_KEY = "NAOwnSMKvck-PWL9nKOSdMoQ-0WSAKxaV2dDRjhwYTRrdz0g"
@@ -62,14 +63,14 @@ def download(feed_name, datastream_name):
 
 
 
-
 def main():
 
   for feed_name, datastream_list in FEEDS.iteritems():
     for datastream_name in datastream_list:
       m = re.search('\[[A-Z0-9-]+\]', datastream_name)
       if m == None:
-        download(feed_name, datastream_name)
+        #download(feed_name, datastream_name)
+        pass
       else:
         pattern = m.group(0)
         ranges = pattern.replace('[','').replace(']','').split('-')
@@ -82,18 +83,16 @@ def main():
           ranges[0] = ord(ranges[0])
           ranges[1] = ord(ranges[1])
           isIntRange = False
-        
+       
         for num in xrange(ranges[0], ranges[1]+1):
           if isIntRange:
             str_num = str(num)
           else:
             str_num = chr(num)
-          
-          datastream_name = datastream_name.replace(pattern, str_num)
+         
+          new_datastream_name = datastream_name.replace(pattern, str_num)
 
-          download(feed_name, datastream_name)
-
-
+          download(feed_name, new_datastream_name)
 
 
 

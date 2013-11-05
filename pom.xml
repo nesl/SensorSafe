@@ -40,15 +40,20 @@
 				</configuration>
 				<dependencies>
 					<dependency>
-						<groupId>com.sun.messaging.mq</groupId>
-						<artifactId>fscontext</artifactId>
-						<version>4.2</version>
+						<groupId>com.informix.jdbcx</groupId>
+						<artifactId>informix-jdbcx-driver</artifactId>
+						<version>3.70JC7</version>
 					</dependency>
 					<dependency>
 						<groupId>com.informix.jdbc</groupId>
 						<artifactId>informix-jdbc-driver</artifactId>
 						<version>3.70JC7</version>
 					</dependency>
+					<!--<dependency>
+						<groupId>com.sun.messaging.mq</groupId>
+						<artifactId>fscontext</artifactId>
+						<version>4.2</version>
+					</dependency>-->
 				</dependencies>
 			</plugin>
 		</plugins>
@@ -67,6 +72,13 @@
 	</dependencyManagement>
 
 	<dependencies>
+		<!-- <dependency> <groupId>junit</groupId> <artifactId>junit</artifactId> 
+			<version>4.11</version> </dependency> <dependency> <groupId>com.sun.jersey.contribs.jersey-oauth</groupId> 
+			<artifactId>oauth-server</artifactId> <version>1.17.1</version> </dependency> 
+			<dependency> <groupId>com.sun.jersey.contribs.jersey-oauth</groupId> <artifactId>oauth-signature</artifactId> 
+			<version>1.17.1</version> </dependency> -->
+		<!--<dependency> <groupId>com.sun.jersey</groupId> <artifactId>jersey-bundle</artifactId> 
+			<version>1.17.1</version> </dependency> -->
 		<dependency>
 			<groupId>com.sun.messaging.mq</groupId>
 			<artifactId>fscontext</artifactId>

@@ -75,6 +75,14 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	private ResultSet storedResultSet;
 	private Stream storedStream;
 
+	static {
+		try {
+			initializeDatabase();
+		} catch (ClassNotFoundException | SQLException e) {
+			e.printStackTrace();
+		}
+	}
+	
 	@Override
 	public void clean() throws SQLException, ClassNotFoundException {
 		Statement stmt1 = null;
@@ -111,7 +119,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
-	public static void initializeDatabase() throws SQLException, ClassNotFoundException {
+	private static void initializeDatabase() throws SQLException, ClassNotFoundException {
 		PreparedStatement pstmt = null;
 		Statement stmt = null;
 		Connection conn = null;

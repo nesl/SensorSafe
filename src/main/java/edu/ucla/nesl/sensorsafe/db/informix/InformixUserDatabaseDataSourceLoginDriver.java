@@ -15,6 +15,11 @@ import edu.ucla.nesl.sensorsafe.model.User;
 
 public class InformixUserDatabaseDataSourceLoginDriver extends InformixDatabaseDriver implements UserDatabaseDriver {
 
+	public InformixUserDatabaseDataSourceLoginDriver() throws SQLException,
+			IOException, NamingException, ClassNotFoundException {
+		super();
+	}
+
 	private static final String USERS_TABLE = "users";
 	private static final String USERNAME_FIELD = "username";
 	private static final String PASSWORD_FIELD = "password";
@@ -28,12 +33,15 @@ public class InformixUserDatabaseDataSourceLoginDriver extends InformixDatabaseD
 	private static final String DEFAULT_ADMIN_PASSWORD = "sensorsafe!";
 	private static final String DEFAULT_ADMIN_ROLE_NAME = ADMIN_ROLE;
 	
-	public InformixUserDatabaseDataSourceLoginDriver() throws SQLException, IOException,
-			NamingException, ClassNotFoundException {
-		super();
-	}	
-		
-	public static void initializeDatabase() throws SQLException {
+	static {
+		try {
+			initializeDatabase();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private static void initializeDatabase() throws SQLException {
 		Connection conn = null;
 		PreparedStatement pstmt = null;
 		try {

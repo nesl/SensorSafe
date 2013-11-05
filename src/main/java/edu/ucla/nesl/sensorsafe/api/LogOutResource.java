@@ -9,6 +9,8 @@ import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
+import com.wordnik.swagger.config.ConfigFactory;
+import com.wordnik.swagger.config.SwaggerConfig;
 
 @Path("logout")
 @Api(value = "logout", description = "Log out from current account.")

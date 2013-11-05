@@ -5,15 +5,26 @@
 
 	<Call name="addBean">
 		<Arg>
-			<!--<New class="org.eclipse.jetty.security.JDBCLoginService"> <Set name="name">Test 
-				Realm</Set> <Set name="config">etc/jdbcRealm.properties</Set> </New> -->
-			<New class="org.eclipse.jetty.security.HashLoginService">
-				<Set name="name">Test Realm</Set>
-				<Set name="config">etc/realm.properties</Set>
-				<Set name="refreshInterval">0</Set>
+			<New class="org.eclipse.jetty.jaas.JAASLoginService">
+				<Set name="Name">Test Realm</Set>
+				<Set name="LoginModuleName">informix-ds-login</Set>
 			</New>
+			<!-- <New class="org.eclipse.jetty.security.JDBCLoginService">
+				<Set name="name">Test Realm</Set>
+				<Set name="config">etc/jdbcRealm.properties</Set>				
+			</New>-->
+			<!--<New class="org.eclipse.jetty.security.HashLoginService"> 
+				<Set name="name">Test Realm</Set>
+				<Set name="config">etc/realm.properties</Set> 
+				<Set name="refreshInterval">0</Set> 
+			</New> -->
 		</Arg>
 	</Call>
+
+    <Call class="java.lang.System" name="setProperty">
+      <Arg>java.security.auth.login.config</Arg>
+      <Arg><Property name="jetty.home" default="." />/<Property name="jaas.login.conf" default="etc/login.conf"/></Arg>
+    </Call>
 
 	<New id="httpConfig" class="org.eclipse.jetty.server.HttpConfiguration">
 		<Set name="secureScheme">https</Set>
@@ -31,5 +42,44 @@
 			<Arg><New class="org.eclipse.jetty.server.ForwardedRequestCustomizer"/></Arg> 
 			</Call> -->
 	</New>
+
+	<New id="cf2" class="org.eclipse.jetty.plus.jndi.Resource">
+		<Arg><Ref refid="Server" /></Arg>
+		<Arg>jdbc/informix-cpds</Arg>
+		<Arg>
+			<New class="com.informix.jdbcx.IfxConnectionPoolDataSource">
+				<Set name="ServerName">sensorsafe</Set>
+				<Set name="User">informix</Set>
+				<Set name="Password">sensorsafe!</Set>
+				<Set name="DatabaseName">sensoract</Set>
+				<Set name="IfxIFXHOST">sensorsafe</Set>
+				<Set name="PortNumber">61000</Set>
+				<Set name="IfxCPMMaxConnections">-1</Set>
+				<Set name="IfxCPMInitPoolSize">0</Set>
+				<Set name="IfxCPMMinPoolSize">8</Set>
+				<Set name="IfxCPMMaxPoolSize">80</Set>
+				<Set name="IfxCPMServiceInterval">100</Set>
+				<Set name="IfxCPMAgeLimit">7200</Set>
+				<Set name="IfxCPMMinAgeLimit">3600</Set>
+			</New>
+		</Arg>
+	</New>
+
+	<New id="cf1" class="org.eclipse.jetty.plus.jndi.Resource">
+		<Arg><Ref refid="Server" /></Arg>
+		<Arg>jdbc/informix-ds</Arg>
+		<Arg>
+			<New class="com.informix.jdbcx.IfxDataSource">
+				<Set name="ServerName">sensorsafe</Set>
+				<Set name="User">informix</Set>
+				<Set name="Password">sensorsafe!</Set>
+				<Set name="DatabaseName">sensoract</Set>
+				<Set name="IfxIFXHOST">sensorsafe</Set>
+				<Set name="PortNumber">61000</Set>
+				<Set name="DataSourceName">java:comp/env/jdbc/informix-cpds</Set>
+			</New>
+		</Arg>
+	</New>
+	
 
 </Configure>

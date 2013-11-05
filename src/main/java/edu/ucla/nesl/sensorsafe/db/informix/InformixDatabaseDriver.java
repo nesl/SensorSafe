@@ -19,17 +19,14 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 
 	protected Connection conn;	
 
-	public InformixDatabaseDriver() throws SQLException, IOException, NamingException, ClassNotFoundException {
-		connect();
-	}
-	
-	public static void initializeConnectionPool() throws SQLException, IOException, NamingException {
-		if (dataSource == null) {
-		
-			// DataSource should be configured at jetty.xml and WEB-INF/web.xml
+	static {
+		try {
+			// Using external JNDI service.  
+			// In Jetty: DataSource should be configured at jetty.xml and WEB-INF/web.xml
 			InitialContext ic = new InitialContext();
 			dataSource = (DataSource) ic.lookup("java:comp/env/jdbc/informix-ds");
-			
+
+			// Set up connection pool without help from Jetty JNDI service.
 			/*System.setProperty(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.fscontext.RefFSContextFactory");
 			System.setProperty(Context.PROVIDER_URL, "file:/tmp");
 			Context registry = new InitialContext();
@@ -45,15 +42,25 @@ abstract public class InformixDatabaseDriver implements DatabaseDriver {
 			}
 			registry.rebind(INFORMIX_DS_NAME, ds);
 			dataSource = (DataSource) registry.lookup(INFORMIX_DS_NAME);*/
+
+		} catch (NamingException e) {
+			e.printStackTrace();
 		}
+	}
+	
+	public InformixDatabaseDriver() throws SQLException, IOException, NamingException, ClassNotFoundException {
+		connect();
 	}
 	
 	@Override
 	public void connect() throws SQLException, ClassNotFoundException, IOException, NamingException {
 		if (dataSource == null) {
-			initializeConnectionPool();
+			throw new IOException("DataSource is not initialized.");
 		}
 		if (conn == null) {
+			conn = dataSource.getConnection();
+		} else {
+			conn.close();
 			conn = dataSource.getConnection();
 		}
 	}

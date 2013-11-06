@@ -16,6 +16,5 @@ public class SensorSafeRequestFilter implements ContainerRequestFilter {
 			throws IOException {
 
 		// TODO Apikey authentication here.
-		Log.info("Filter");
 	}
 }

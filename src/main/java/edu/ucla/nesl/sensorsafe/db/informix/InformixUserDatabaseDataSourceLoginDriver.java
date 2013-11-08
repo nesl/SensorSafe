@@ -125,7 +125,31 @@ public class InformixUserDatabaseDataSourceLoginDriver extends InformixDatabaseD
 				pstmt.close();
 		}
 	}
-	
+
+	@Override
+	public void registerUser(User newUser) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			try {
+				pstmt = conn.prepareStatement("INSERT INTO " + USERS_TABLE 
+						+ " (" + USERNAME_FIELD + "," + PASSWORD_FIELD + "," + ROLE_FIELD + ") VALUES (?,?,?)");
+				pstmt.setString(1, newUser.email);
+				pstmt.setString(2, newUser.password);
+				pstmt.setString(3, USER_ROLE);
+				pstmt.executeUpdate();
+				pstmt.close();
+			} catch (SQLException e) {
+				if (e.toString().contains("Unique constraint") && e.toString().contains("violated."))
+					throw new IllegalArgumentException("Username already registered.");
+				else
+					throw e;
+			}
+		} finally {
+			if (pstmt != null) 
+				pstmt.close();
+		}
+	}
+
 	@Override
 	public List<User> getUsers() throws SQLException {
 		PreparedStatement pstmt = null;

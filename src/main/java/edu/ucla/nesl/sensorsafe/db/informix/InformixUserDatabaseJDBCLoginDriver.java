@@ -185,4 +185,10 @@ public class InformixUserDatabaseJDBCLoginDriver extends InformixDatabaseDriver 
 		// TODO Auto-generated method stub
 		return null;
 	}
+
+	@Override
+	public void registerUser(User newUser) throws SQLException {
+		// TODO Auto-generated method stub
+		
+	}
 }

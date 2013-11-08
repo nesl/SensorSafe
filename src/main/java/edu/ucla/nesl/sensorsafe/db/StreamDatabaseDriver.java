@@ -30,7 +30,10 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void addTuple(String owner, String streamName, String strTuple) 
 			throws SQLException;
 	
-	public void prepareQuery(String requestingUser, String streamOwner, String streamName, String startTime, String endTime, String expr, int limit, int offset) 
+	/*
+	 * Returns false if no data are allowed.
+	 */
+	public boolean prepareQuery(String requestingUser, String streamOwner, String streamName, String startTime, String endTime, String expr, int limit, int offset) 
 			throws SQLException, JsonProcessingException;
 	
 	public Stream getStreamInfo(String owner, String name) 

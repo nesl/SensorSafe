@@ -821,8 +821,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		
 		return expr;
 	}
-	
-	public void prepareQuery(
+
+	public boolean prepareQuery(
 			String requestingUser,
 			String streamOwner, 
 			String streamName, 
@@ -870,7 +870,13 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				sql += " AND ( " + filter + " )";
 			}
 			
-			sql = applyRules(streamOwner, requestingUser, sql, stream);
+			if (!streamOwner.equals(requestingUser)) {
+				sql = applyRules(streamOwner, requestingUser, sql, stream);
+				if (sql == null) {
+					// No allow rules for non-owner.
+					return false;
+				}
+			}
 			sql = convertMacros(streamOwner, sql);
 			sql = processCronTimeExpression(sql);
 			sql = convertCStyleBooleanOperators(sql);
@@ -910,6 +916,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				pstmt.close();
 			throw e;
 		}
+		return true;
 	}
 
 	private void cleanUpStoredInfo() throws SQLException {
@@ -975,17 +982,21 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt.setString(1, streamOwner);
 			pstmt.setString(2, "allow");
 			pstmt.setString(3, stream.name);
-			if (requestingUser != null)
-				pstmt.setString(4, requestingUser);
+			pstmt.setString(4, requestingUser);
 			ResultSet rset = pstmt.executeQuery();
 			List<String> sqlFragList = new LinkedList<String>();
 			while (rset.next()) {
 				String condition = rset.getString(1);				
 				sqlFragList.add("( " + condition + " )"); 
 			}
-			if (sqlFragList.size() > 0)
+			
+			if (sqlFragList.size() > 0) {
 				allowRuleCond = "( " + StringUtils.join(sqlFragList, " OR ") + " )";
-
+			} else {
+				// No allow rules.
+				return null;
+			}
+			
 			// Process deny rules
 			pstmt.setString(2, "deny");
 			rset = pstmt.executeQuery();
@@ -998,13 +1009,10 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				denyRuleCond = "NOT ( " + StringUtils.join(sqlFragList, " OR ") + " )";
 
 			// Merge allow and deny rules.
-			if (allowRuleCond != null && denyRuleCond != null) 
-				ruleCond = allowRuleCond + " AND " + denyRuleCond;
-			else if (allowRuleCond == null && denyRuleCond != null)
-				ruleCond = denyRuleCond;
-			else if (allowRuleCond != null && denyRuleCond == null)
-				ruleCond = allowRuleCond;
-
+			ruleCond = allowRuleCond;
+			if (denyRuleCond != null) {
+				ruleCond += " AND " + denyRuleCond;
+			}
 		} finally {
 			if (pstmt != null) 
 				pstmt.close();

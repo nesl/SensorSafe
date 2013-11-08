@@ -15,5 +15,7 @@ public interface UserDatabaseDriver extends DatabaseDriver {
 
 	public List<User> getOwners() throws SQLException;
 
-	public List<User> getAdmins() throws SQLException;	
+	public List<User> getAdmins() throws SQLException;
+
+	void registerUser(User newUser) throws SQLException;	
 }

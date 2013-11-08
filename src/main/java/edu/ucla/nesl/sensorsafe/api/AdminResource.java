@@ -145,6 +145,35 @@ public class AdminResource {
 		}
 		return new ResponseMsg("Successfully added a new owner.");
 	}
+
+	@POST
+	@Path("/users")
+	@Consumes(MediaType.APPLICATION_JSON)
+    @ApiOperation(value = "Register a new user.", notes = "TBD")
+    @ApiResponses(value = {
+    		@ApiResponse(code = 500, message = "Internal Server Error")
+    })
+	public ResponseMsg doPostUsers(User newUser) {
+		UserDatabaseDriver db = null;
+		try {
+			db = DatabaseConnector.getUserDatabase();
+			db.registerUser(newUser);
+		} catch (ClassNotFoundException | IOException | NamingException | SQLException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
+		} finally {
+			if (db != null) { 
+				try {
+					db.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return new ResponseMsg("Successfully added a new user.");
+	}
+
 	
 	@POST
 	@Path("/password")

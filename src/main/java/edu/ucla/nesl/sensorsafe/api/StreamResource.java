@@ -274,12 +274,15 @@ public class StreamResource {
 				strJson = strJson.substring(0, strJson.length() - 1) + ",\"tuples\":[";
 
 				if (!isHttpStreaming) {
-					db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
-					JSONArray tuple = db.getNextJsonTuple();
-					if (tuple != null) {
-						strJson += tuple.toString();
-						while((tuple = db.getNextJsonTuple()) != null) {
-							strJson += "," + tuple.toString();
+					boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
+					Log.info("isData: " + isData);
+					if (isData) {
+						JSONArray tuple = db.getNextJsonTuple();
+						if (tuple != null) {
+							strJson += tuple.toString();
+							while((tuple = db.getNextJsonTuple()) != null) {
+								strJson += "," + tuple.toString();
+							}
 						}
 					}
 					return strJson + "]}";
@@ -291,14 +294,16 @@ public class StreamResource {
 							StreamDatabaseDriver db = null;
 							try {
 								db = DatabaseConnector.getStreamDatabase();
-								db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
+								boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
 								IOUtils.write(strJsonOutput, output);
-								JSONArray tuple;
-								tuple = db.getNextJsonTuple();
-								if (tuple != null) {
-									IOUtils.write(tuple.toString(), output);
-									while((tuple = db.getNextJsonTuple()) != null) {
-										IOUtils.write("," + tuple.toString(), output);
+								if (isData) {
+									JSONArray tuple;
+									tuple = db.getNextJsonTuple();
+									if (tuple != null) {
+										IOUtils.write(tuple.toString(), output);
+										while((tuple = db.getNextJsonTuple()) != null) {
+											IOUtils.write("," + tuple.toString(), output);
+										}
 									}
 								}
 								IOUtils.write("]}", output);

@@ -228,9 +228,9 @@ public class StreamResource {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
 	public Object doGetStream(
-			@PathParam("stream_name") 					final String streamName,
-			@ApiParam(name = "stream_owner", required = true)
-			@QueryParam("stream_owner")					final String streamOwner,
+			@PathParam("stream_name") 					final String streamName,			
+			@ApiParam(name = "stream_owner", value = "If null, get currently authenticated user's stream.")
+			@QueryParam("stream_owner")					final String streamOwnerParam,
 			@QueryParam("http_streaming") 				final boolean isHttpStreaming,
 			@QueryParam("start_time") 					final String startTime, 
 			@QueryParam("end_time") 					final String endTime,
@@ -244,12 +244,13 @@ public class StreamResource {
 			@QueryParam("filter") 						final String filter,
 			@ApiParam(name = "function", value = "WIP. Query test function.")  
 			@QueryParam("function") 					final String function ,
-			@ApiParam(value = "Default value 100.") 
+			@ApiParam(name = "limit", value = "Default value 100.") 
 			@DefaultValue("100") @QueryParam("limit") 	final int limit,
 			@QueryParam("offset") 						final int offset) {
 
 		StreamDatabaseDriver db = null;
-		final String requestingUser = httpReq.getRemoteUser();
+		final String requestingUser = httpReq.getRemoteUser();		
+		final String streamOwner = streamOwnerParam == null ? httpReq.getRemoteUser() : streamOwnerParam;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 			if (function != null) {

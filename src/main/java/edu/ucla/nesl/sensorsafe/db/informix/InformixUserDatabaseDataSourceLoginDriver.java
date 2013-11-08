@@ -41,7 +41,7 @@ public class InformixUserDatabaseDataSourceLoginDriver extends InformixDatabaseD
 		}
 	}
 	
-	private static void initializeDatabase() throws SQLException {
+	public static void initializeDatabase() throws SQLException {
 		Connection conn = null;
 		PreparedStatement pstmt = null;
 		try {

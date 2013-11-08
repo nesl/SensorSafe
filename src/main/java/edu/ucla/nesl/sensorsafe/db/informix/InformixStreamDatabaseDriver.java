@@ -42,7 +42,6 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -119,7 +118,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		}
 	}
 
-	private static void initializeDatabase() throws SQLException, ClassNotFoundException {
+	public static void initializeDatabase() throws SQLException, ClassNotFoundException {
 		PreparedStatement pstmt = null;
 		Statement stmt = null;
 		Connection conn = null;
@@ -812,7 +811,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			pstmt.setString(1, owner);
 			ResultSet rset = pstmt.executeQuery();
 			while (rset.next()) {
-				expr = expr.replace(rset.getString(1), rset.getString(2));
+				expr = expr.replace("$(" + rset.getString(1) + ")", rset.getString(2));
 			}
 		} finally {
 			if (pstmt != null) {
@@ -871,16 +870,12 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 				sql += " AND ( " + filter + " )";
 			}
 			
-			// TODO find out requesting user name.
 			sql = applyRules(streamOwner, requestingUser, sql, stream);
-
 			sql = convertMacros(streamOwner, sql);
 			sql = processCronTimeExpression(sql);
 			sql = convertCStyleBooleanOperators(sql);
 			sql = convertChannelNames(stream.channels, sql);
 			sql = convertDateTimePartExpression(sql);
-			
-			Log.info(sql);
 			
 			pstmt = conn.prepareStatement(sql);
 			int i = 1;

@@ -31,12 +31,17 @@ public class Stream {
 	@ApiModelProperty(value = "ID")
 	public int id;
 	
+	@XmlElement(name = "num_samples")
+	@ApiModelProperty(value = "Total number of samples in the stream")
+	public long numSamples;
+	
 	public Stream() {}
 	
-	public Stream(int id, String name, String tags, List<Channel> channels) {
+	public Stream(int id, String name, String tags, List<Channel> channels, long numSamples) {
 		this.id = id;
 		this.name = name;
 		this.tags = tags;
 		this.channels = (channels != null) ? new LinkedList<Channel>(channels) : null;
+		this.numSamples = numSamples;
 	}
 }	

@@ -877,6 +877,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			sql = convertChannelNames(stream.channels, sql);
 			sql = convertDateTimePartExpression(sql);
 			
+			//Log.info(sql + " (" + limit + ", " + stream.id + ")");
+			
 			pstmt = conn.prepareStatement(sql);
 			int i = 1;
 			if (offset > 0) {
@@ -1040,6 +1042,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	@Override
 	public Stream getStreamInfo(String owner, String streamName) throws SQLException {
 		PreparedStatement pstmt = null;
+		PreparedStatement pstmt2 = null;
 		Stream stream = null;
 		try {
 			String sql = "SELECT tags, channels, id FROM streams WHERE owner = ? AND name = ?";
@@ -1053,10 +1056,19 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			String tags = rset.getString(1);
 			List<Channel> channels = getListChannelFromSqlArray(rset.getArray(2));
 			int id = rset.getInt(3);
-			stream = new Stream(id, streamName, tags, channels);
+			pstmt2 = conn.prepareStatement("SELECT GetNelems(tuples) FROM " + getTableName(channels) + " WHERE id = ?");
+			pstmt2.setInt(1, id);
+			ResultSet rset2 = pstmt2.executeQuery();
+			if (!rset2.next()) {
+				throw new IllegalStateException("ResultSet is null.");
+			}
+			int numSamples = rset2.getInt(1);
+			stream = new Stream(id, streamName, tags, channels, numSamples);
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
+			if (pstmt2 != null)
+				pstmt2.close();
 		}		
 
 		return stream;
@@ -1066,18 +1078,29 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 	public List<Stream> getStreamList(String owner) throws SQLException {
 		List<Stream> streams;
 		PreparedStatement pstmt = null;
-
+		PreparedStatement pstmt2 = null;
 		try {
 			pstmt = conn.prepareStatement("SELECT id, name, tags, channels FROM streams WHERE owner = ?");
 			pstmt.setString(1, owner);
 			ResultSet rSet = pstmt.executeQuery();
 			streams = new LinkedList<Stream>();
 			while (rSet.next()) {
-				streams.add(new Stream(rSet.getInt(1), rSet.getString(2), rSet.getString(3), getListChannelFromSqlArray(rSet.getArray(4)))); 
+				int id = rSet.getInt(1);
+				List<Channel> channels = getListChannelFromSqlArray(rSet.getArray(4));
+				pstmt2 = conn.prepareStatement("SELECT GetNelems(tuples) FROM " + getTableName(channels) + " WHERE id = ?");
+				pstmt2.setInt(1, id);
+				ResultSet rset2 = pstmt2.executeQuery();
+				if (!rset2.next()) {
+					throw new IllegalStateException("ResultSet is null.");
+				}
+				int numSamples = rset2.getInt(1);
+				streams.add(new Stream(id, rSet.getString(2), rSet.getString(3), channels, numSamples)); 
 			}
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
+			if (pstmt2 != null)
+				pstmt2.close();
 		}
 
 		return streams;

@@ -42,6 +42,7 @@ import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path("/streams")
@@ -269,9 +270,8 @@ public class StreamResource {
 				AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
 				mapper.setAnnotationIntrospector(introspector);
 				JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
-				json.put("tuples", null);
 				String strJson = json.toString();
-				strJson = strJson.substring(0, strJson.length() - 5) + "[";
+				strJson = strJson.substring(0, strJson.length() - 1) + ",\"tuples\":[";
 
 				if (!isHttpStreaming) {
 					db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);

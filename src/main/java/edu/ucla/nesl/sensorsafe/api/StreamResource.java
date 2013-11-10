@@ -275,7 +275,6 @@ public class StreamResource {
 
 				if (!isHttpStreaming) {
 					boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
-					Log.info("isData: " + isData);
 					if (isData) {
 						JSONArray tuple = db.getNextJsonTuple();
 						if (tuple != null) {

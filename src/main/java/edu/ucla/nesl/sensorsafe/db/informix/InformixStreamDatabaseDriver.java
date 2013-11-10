@@ -611,7 +611,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			rset.next();
 			String prefix = getChannelFormatPrefix(getListChannelFromSqlArray(rset.getArray(1)));
 			int id = rset.getInt(2);
-
 			executeSqlInsertIntoTimeseries(id, strTuple, prefix);
 		} finally {
 			if (pstmt != null) 
@@ -654,7 +653,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 
 		if (objTuple instanceof JSONArray) {
 			boolean isFirst = true;
-			int idx = 0;
 			for (Object obj: (JSONArray)objTuple) {
 				if (isFirst) {
 					if (obj == null)
@@ -664,8 +662,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 					}
 					isFirst = false;
 				} else {
-					values += parseTuple(format, idx, obj) + ", ";
-					idx += 1;
+					values += obj.toString() + ", ";
 				}
 			}
 		} else if (objTuple instanceof JSONObject) {
@@ -678,10 +675,8 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 			}
 			JSONArray tuples = (JSONArray)json.get("tuple");
 
-			int idx = 0;
 			for (Object obj: tuples) {
-				values += parseTuple(format, idx, obj) + ", ";
-				idx += 1;
+				values += obj.toString() + ", ";
 			}
 		} else {
 			throwInvalidTupleFormat(format);
@@ -710,29 +705,6 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		tupleFormat = tupleFormat.substring(0, tupleFormat.length() - 2) + " ]";
 		throw new IllegalArgumentException("Invalid tuple data type. Expected tuple format: " + tupleFormat);
 	}
-
-	private String parseTuple(String[] format, int idx, Object obj) {
-		String value = "";
-		try {
-			if (format[idx].equals("float")) {
-				if (obj instanceof Double)
-					value = ((Double)obj).toString();
-				else if (obj instanceof Integer)
-					value = ((Integer)obj).toString();
-				else 
-					throw new ClassCastException();
-			}							
-			else if (format[idx].equals("int"))
-				value = ((Integer)obj).toString();
-			else if (format[idx].equals("text"))
-				value = "'" + (String)obj + "'";
-		} catch (ClassCastException | ArrayIndexOutOfBoundsException e) {
-			throwInvalidTupleFormat(format);
-		}
-
-		return value;
-	}
-
 
 	private class AddTupleRequestParseResult {
 		public Timestamp timestamp;

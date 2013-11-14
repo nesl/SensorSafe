@@ -16,6 +16,7 @@ import javax.ws.rs.core.SecurityContext;
 
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
+import com.wordnik.swagger.annotations.ApiParam;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
 
@@ -29,8 +30,8 @@ import edu.ucla.nesl.sensorsafe.oauth.SensorSafeOAuth1Provider.Token;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path(SensorSafeResourceConfig.AUTHORIZE_API_PATH)
-@Api(value = "oauth", description = "OAuth operations.")
-public class OAuthResource {
+@Api(value = SensorSafeResourceConfig.AUTHORIZE_API_PATH, description = "OAuth operations.")
+public class OAuthAuthorizeResource {
 	
 	private static final SensorSafeOAuth1Provider oauthProvider = SensorSafeResourceConfig.oauthProvider;
 	
@@ -43,7 +44,9 @@ public class OAuthResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-	public String authorize(@QueryParam("oauth_token") String oauthToken) {
+	public String authorize(
+			@ApiParam(name = "oauth_token", required = true)
+			@QueryParam("oauth_token") String oauthToken) {
 		
 		if (oauthToken == null) {
 			throw WebExceptionBuilder.buildBadRequest("oauth_token is null.");

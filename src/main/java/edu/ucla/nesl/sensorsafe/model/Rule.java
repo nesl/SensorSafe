@@ -18,11 +18,11 @@ public class Rule {
 	@ApiModelProperty(value = "Unique id for this rule.")
 	public int id;
 	
-	@XmlElement(name = "targetUsers")
+	@XmlElement(name = "target_users")
 	@ApiModelProperty(value = "List of user names for this rule to be applied. If null, always applied.")
 	public List<String> targetUsers;
 	
-	@XmlElement(name = "targetStreams")
+	@XmlElement(name = "target_streams")
 	@ApiModelProperty(value = "List of stream names for this rule to be applied. If null, applied to all streams.")
 	public List<String> targetStreams;
 	

@@ -5,15 +5,15 @@ import java.sql.SQLException;
 
 import javax.naming.NamingException;
 
-import edu.ucla.nesl.sensorsafe.db.informix.InformixStreamDatabaseDriver;
-import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabaseDataSourceLoginDriver;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixStreamDatabase;
+import edu.ucla.nesl.sensorsafe.db.informix.InformixUserDatabase;
 
 public class DatabaseConnector {
 	public static StreamDatabaseDriver getStreamDatabase() throws ClassNotFoundException, SQLException, IOException, NamingException {
-		return new InformixStreamDatabaseDriver();
+		return new InformixStreamDatabase();
 	}
 	
 	public static UserDatabaseDriver getUserDatabase() throws ClassNotFoundException, SQLException, IOException, NamingException {
-		return new InformixUserDatabaseDataSourceLoginDriver();
+		return new InformixUserDatabase();
 	}
 }

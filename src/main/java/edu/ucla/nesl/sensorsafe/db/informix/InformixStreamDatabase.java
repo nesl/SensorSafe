@@ -43,9 +43,9 @@ import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.Stream;
 
-public class InformixStreamDatabaseDriver extends InformixDatabaseDriver implements StreamDatabaseDriver {
+public class InformixStreamDatabase extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
-	public InformixStreamDatabaseDriver() throws SQLException, IOException,
+	public InformixStreamDatabase() throws SQLException, IOException,
 			NamingException, ClassNotFoundException {
 		super();
 	}
@@ -1195,6 +1195,7 @@ public class InformixStreamDatabaseDriver extends InformixDatabaseDriver impleme
 		DateTimeFormatter returnFmt = null;
 		
 		String timestamp = lines[0].split(delimiter, 2)[0];
+		@SuppressWarnings("unused")
 		DateTime dt = null;
 		try {
 			dt = sqlFmtFraction.parseDateTime(timestamp);

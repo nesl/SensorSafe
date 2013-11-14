@@ -8,7 +8,7 @@
 
 	<servlet>
 		<servlet-name>SensorSafeSwaggerConfig</servlet-name>
-		<servlet-class>edu.ucla.nesl.sensorsafe.SensorSafeSwaggerConfig</servlet-class>
+		<servlet-class>edu.ucla.nesl.sensorsafe.init.SensorSafeSwaggerConfig</servlet-class>
 		<load-on-startup>1</load-on-startup>
 	</servlet>
 
@@ -21,11 +21,7 @@
 		</init-param>
 		<init-param>
 			<param-name>javax.ws.rs.Application</param-name>
-			<param-value>edu.ucla.nesl.sensorsafe.oauth.OAuthConfig</param-value>
-		</init-param>
-		<init-param>
-			<param-name>com.sun.jersey.spi.container.ContainerRequestFilters</param-name>
-			<param-value>edu.ucla.nesl.sensorsafe.SensorSafeRequestFilter</param-value>
+			<param-value>edu.ucla.nesl.sensorsafe.init.SensorSafeResourceConfig</param-value>
 		</init-param>
 		<load-on-startup>2</load-on-startup>
 	</servlet>
@@ -35,57 +31,8 @@
 		<url-pattern>/api/*</url-pattern>
 	</servlet-mapping>
 
-	<security-constraint>
-		<web-resource-collection>
-			<web-resource-name>admin</web-resource-name>
-			<url-pattern>/api/admin/*</url-pattern>
-		</web-resource-collection>
-		<auth-constraint>
-			<role-name>admin</role-name>
-		</auth-constraint>
-	</security-constraint>
-
-	<security-constraint>
-		<web-resource-collection>
-			<web-resource-name>logout</web-resource-name>
-			<url-pattern>/api/logout</url-pattern>
-		</web-resource-collection>
-		<auth-constraint>
-			<role-name>admin</role-name>
-			<role-name>owner</role-name>
-			<role-name>user</role-name>
-		</auth-constraint>
-	</security-constraint>
-
-	<security-constraint>
-		<web-resource-collection>
-			<web-resource-name>streams</web-resource-name>
-			<url-pattern>/api/streams/*</url-pattern>
-		</web-resource-collection>
-		<auth-constraint>
-			<role-name>owner</role-name>
-			<role-name>user</role-name>
-		</auth-constraint>
-	</security-constraint>
-
-	<security-constraint>
-		<web-resource-collection>
-			<web-resource-name>rules</web-resource-name>
-			<url-pattern>/api/rules/*</url-pattern>
-		</web-resource-collection>
-		<auth-constraint>
-			<role-name>owner</role-name>
-			<role-name>user</role-name>
-		</auth-constraint>
-	</security-constraint>
-
-	<login-config>
-		<auth-method>BASIC</auth-method>
-		<realm-name>Test Realm</realm-name>
-	</login-config>
-
 	<listener>
-		<listener-class>edu.ucla.nesl.sensorsafe.SensorSafeServletContext</listener-class>
+		<listener-class>edu.ucla.nesl.sensorsafe.init.SensorSafeServletContext</listener-class>
 	</listener>
 
 	<resource-ref>

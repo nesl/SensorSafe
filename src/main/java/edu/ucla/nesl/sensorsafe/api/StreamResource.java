@@ -6,8 +6,9 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.util.List;
 
+import javax.annotation.security.PermitAll;
+import javax.annotation.security.RolesAllowed;
 import javax.naming.NamingException;
-import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -21,6 +22,7 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.StreamingOutput;
 
 import net.minidev.json.JSONArray;
@@ -38,34 +40,43 @@ import com.wordnik.swagger.annotations.ApiParam;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
 
+import edu.ucla.nesl.sensorsafe.auth.Roles;
 import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.model.Stream;
-import edu.ucla.nesl.sensorsafe.tools.Log;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path("/streams")
 @Produces(MediaType.APPLICATION_JSON)
 @Api(value = "/streams", description = "Operations about streams.")
+@PermitAll
 public class StreamResource {
 
 	private static final int ROW_LIMIT_WITHOUT_HTTP_STREAMING = 100;
 
-	@Context 
-	private HttpServletRequest httpReq;
+	@Context
+	private SecurityContext securityContext;
 
+	@RolesAllowed({ Roles.OWNER, Roles.CONSUMER })
 	@GET
 	@ApiOperation(value = "Get list of streams", notes = "TBD")
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public List<Stream> doGetAllStreams() {    	
+	public List<Stream> doGetAllStreams(
+			@ApiParam(name = "stream_owner", value = "If null, get currently authenticated user's streams.")
+			@QueryParam("stream_owner") String streamOwner) {
+		
+		if (streamOwner == null) {
+			streamOwner = securityContext.getUserPrincipal().getName();
+		}
+		
 		List<Stream> streams = null;
 		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			streams = db.getStreamList(httpReq.getRemoteUser());			
+			streams = db.getStreamList(streamOwner);			
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -80,6 +91,7 @@ public class StreamResource {
 		return streams;
 	}
 
+	@RolesAllowed(Roles.OWNER)
 	@POST
 	@Consumes(MediaType.APPLICATION_JSON)
 	@ApiOperation(value = "Create a new stream", notes = "TBD")
@@ -88,9 +100,10 @@ public class StreamResource {
 	})
 	public ResponseMsg doPostNewStream(@Valid Stream stream) {
 		StreamDatabaseDriver db = null;
+		String ownerName = securityContext.getUserPrincipal().getName();
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			db.createStream(httpReq.getRemoteUser(), stream);
+			db.createStream(ownerName, stream);
 		} catch (IOException | NamingException | SQLException | ClassNotFoundException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
@@ -107,16 +120,18 @@ public class StreamResource {
 		return new ResponseMsg("Successfully created a new stream: " + stream.name);
 	}
 
+	@RolesAllowed(Roles.OWNER)
 	@DELETE
 	@ApiOperation(value = "Delete entire streams.", notes = "TBD")
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
 	public ResponseMsg doDeleteAllStreams() {
+		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			db.deleteAllStreams(httpReq.getRemoteUser());
+			db.deleteAllStreams(ownerName);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -131,7 +146,7 @@ public class StreamResource {
 		return new ResponseMsg("Successfully deleted all streams.");
 	}
 
-	
+	@RolesAllowed(Roles.OWNER)
 	@POST
 	@Path("/{stream_name}.csv")
 	@Consumes(MediaType.APPLICATION_OCTET_STREAM)
@@ -153,11 +168,12 @@ public class StreamResource {
 					+ "2013-01-01 09:20:14.12345, 10.4, 4.2, 7.5\n"
 					+ "</pre>")
 			String data) {
-
+		
+		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			db.bulkLoad(httpReq.getRemoteUser(), streamName, data);
+			db.bulkLoad(ownerName, streamName, data);
 		} catch (SQLException | IOException | ClassNotFoundException | NamingException | NoSuchAlgorithmException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
@@ -174,6 +190,7 @@ public class StreamResource {
 		return new ResponseMsg("Successfully completed bulkloading.");
 	}
 
+	@RolesAllowed(Roles.OWNER)
 	@POST
 	@Path("/{stream_name}")
 	@Consumes(MediaType.APPLICATION_JSON)
@@ -202,10 +219,11 @@ public class StreamResource {
 					+ "If timestamp is null, current server time will be used.</pre>") 
 			String strTuple) {
 
+		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			db.addTuple(httpReq.getRemoteUser(), streamName, strTuple);
+			db.addTuple(ownerName, streamName, strTuple);
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
@@ -222,6 +240,7 @@ public class StreamResource {
 		return new ResponseMsg("Successfully added the tuple.");
 	}
 
+	@RolesAllowed({ Roles.OWNER, Roles.CONSUMER })
 	@GET
 	@Path("/{stream_name}")
 	@ApiOperation(value = "Retrieve the stream.", notes = "TBD")
@@ -230,7 +249,7 @@ public class StreamResource {
 	})
 	public Object doGetStream(
 			@PathParam("stream_name") 					final String streamName,			
-			@ApiParam(name = "stream_owner", value = "If null, get currently authenticated user's stream.")
+			@ApiParam(name = "stream_owner", value = "If null, get currently authenticated user's streams.")
 			@QueryParam("stream_owner")					final String streamOwnerParam,
 			@QueryParam("http_streaming") 				final boolean isHttpStreaming,
 			@QueryParam("start_time") 					final String startTime, 
@@ -250,8 +269,8 @@ public class StreamResource {
 			@QueryParam("offset") 						final int offset) {
 
 		StreamDatabaseDriver db = null;
-		final String requestingUser = httpReq.getRemoteUser();		
-		final String streamOwner = streamOwnerParam == null ? httpReq.getRemoteUser() : streamOwnerParam;
+		final String requestingUser = securityContext.getUserPrincipal().getName();		
+		final String streamOwner = streamOwnerParam == null ? requestingUser : streamOwnerParam;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 			if (function != null) {
@@ -337,6 +356,7 @@ public class StreamResource {
 	}	
 
 
+	@RolesAllowed(Roles.OWNER)
 	@DELETE
 	@Path("/{stream_name}")
 	@ApiOperation(value = "Delete a stream.", notes = "TBD")
@@ -348,10 +368,11 @@ public class StreamResource {
 			@QueryParam("start_time") 	String startTime, 
 			@QueryParam("end_time") 	String endTime) {
 
+		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			db.deleteStream(httpReq.getRemoteUser(), streamName, startTime, endTime);
+			db.deleteStream(ownerName, streamName, startTime, endTime);
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {

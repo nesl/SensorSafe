@@ -3,24 +3,22 @@ package edu.ucla.nesl.sensorsafe.api;
 import java.net.URI;
 import java.net.URISyntaxException;
 
+import javax.annotation.security.PermitAll;
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 
-import edu.ucla.nesl.sensorsafe.SensorSafeSwaggerConfig;
+import edu.ucla.nesl.sensorsafe.init.SensorSafeSwaggerConfig;
 
 @Path("doc")
-public class Doc {
+@PermitAll
+public class DocResource {
 	
 	@Context 
 	private HttpServletRequest httpReq;
 	
-	@Context 
-	private HttpServletResponse httpRes;
-
 	@GET
 	public Response doGet() throws URISyntaxException {
 		String addr = httpReq.getLocalAddr();

@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import javax.annotation.security.RolesAllowed;
 import javax.naming.NamingException;
-import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -16,25 +16,28 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.SecurityContext;
 
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
 
+import edu.ucla.nesl.sensorsafe.auth.Roles;
 import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
+@RolesAllowed(Roles.OWNER)
 @Path("macros")
 @Produces(MediaType.APPLICATION_JSON)
 @Api(value = "macros", description = "Operation about macros.")
 public class MacroResource {
 
-	@Context 
-	private HttpServletRequest httpReq;
+	@Context
+	private SecurityContext securityContext;
 
 	@GET
     @ApiOperation(value = "List current macros.", notes = "TBD")
@@ -42,11 +45,12 @@ public class MacroResource {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
 	public List<Macro> doGet() {
+		String ownerName = securityContext.getUserPrincipal().getName();
 		List<Macro> macros;
     	StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			macros = db.getMacros(httpReq.getRemoteUser());
+			macros = db.getMacros(ownerName);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -69,10 +73,11 @@ public class MacroResource {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
     public ResponseMsg doPost(@Valid Macro macro) {
+    	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {
     		db = DatabaseConnector.getStreamDatabase();
-    		db.addOrUpdateMacro(httpReq.getRemoteUser(), macro);
+    		db.addOrUpdateMacro(ownerName, macro);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -96,13 +101,15 @@ public class MacroResource {
     public ResponseMsg doDelete(
     		@QueryParam("id") int id,
     		@QueryParam("macro_name") String macroName) {
+    	
+    	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {
     		db = DatabaseConnector.getStreamDatabase();
     		if (id > 0 || macroName != null) 
-    			db.deleteMacro(httpReq.getRemoteUser(), id, macroName);
+    			db.deleteMacro(ownerName, id, macroName);
     		else 
-    			db.deleteAllMacros(httpReq.getRemoteUser());
+    			db.deleteAllMacros(ownerName);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {

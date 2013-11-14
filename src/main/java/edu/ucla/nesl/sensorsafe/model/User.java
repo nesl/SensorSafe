@@ -11,54 +11,79 @@ import com.wordnik.swagger.annotations.ApiModelProperty;
 @XmlRootElement(name = "user")
 public class User {
 
-	@XmlElement(name = "email")
-	@ApiModelProperty(value = "E-mail", required = true)
+	@XmlElement(name = "username")
+	@ApiModelProperty(value = "username", required = true)
 	@NotNull
-	public String email;
+	public String username;
 
-	@XmlElement(name = "group")
-	@ApiModelProperty(value = "Group", allowableValues = "owner,user,admin", required = true)
-	@NotNull
-	public String group;
-	
 	@XmlElement(name = "password")
-	@ApiModelProperty(value = "Password", required = true)
+	@ApiModelProperty(value = "password", required = true)
 	@NotNull
 	public String password;
 	
-	@XmlElement(name = "firstName")
-	@ApiModelProperty(value = "First name")
-	public String firstName;
+	@XmlElement(name = "role")
+	public String role;
 	
-	@XmlElement(name = "lastName")
-	@ApiModelProperty(value = "Last name")
-	public String lastName;
-
+	@XmlElement(name = "owner")
+	public String owner;
+	
+	@XmlElement(name = "email")
+	public String email;
+	
 	@XmlElement(name = "apikey")
-	@ApiModelProperty(value = "Apikey")
 	public String apikey;
 	
-	public User() {}
+	@XmlElement(name = "oauth_consumer_key")
+	public String oauthConsumerKey;
 	
-	public User(String email, String firstName, String lastName) {
-		this.email = email;
-		this.firstName = firstName;
-		this.lastName = lastName;
+	@XmlElement(name = "oauth_consumer_secret")
+	public String oauthConsumerSecret;
+	
+	@XmlElement(name = "oauth_access_key")
+	public String oauthAccessKey;
+	
+	@XmlElement(name = "oauth_access_secret")
+	public String oauthAccessSecret;
+	
+	public User() {}
+
+	public void setOwner(String owner) {
+		this.owner = owner;
 	}
 	
-	public User(String email, String group, String firstName, String lastName, String apikey) {
+	public void setUsername(String username) {
+		this.username = username;
+	}
+
+	public void setRole(String role) {
+		this.role = role;
+	}
+
+	public void setEmail(String email) {
 		this.email = email;
-		this.group = group;
-		this.apikey = apikey;
-		this.firstName = firstName;
-		this.lastName = lastName;
+	}
+	
+	public void setPassword(String password) {
+		this.password = password;
 	}
 	
 	public void setApikey(String apikey) {
 		this.apikey = apikey;
 	}
 	
-	public void setGroup(String group) {
-		this.group = group;
+	public void setOAuthConsumerKey(String oauthConsumerKey) {
+		this.oauthConsumerKey = oauthConsumerKey;
+	}
+	
+	public void setOAuthConsumerSecret(String oauthConsumerSecret) {
+		this.oauthConsumerSecret = oauthConsumerSecret;
+	}
+
+	public void setOAuthAccessKey(String oauthAccessKey) {
+		this.oauthAccessKey = oauthAccessKey;
+	}
+	
+	public void setOAuthAccessSecret(String oauthAccessSecret) {
+		this.oauthAccessSecret = oauthAccessSecret;
 	}
 }

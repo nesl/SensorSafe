@@ -1,5 +1,6 @@
 package edu.ucla.nesl.sensorsafe.api;
 
+import javax.annotation.security.PermitAll;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.WebApplicationException;
@@ -9,11 +10,10 @@ import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
-import com.wordnik.swagger.config.ConfigFactory;
-import com.wordnik.swagger.config.SwaggerConfig;
 
 @Path("logout")
 @Api(value = "logout", description = "Log out from current account.")
+@PermitAll
 public class LogOutResource {
 	
 	@GET

@@ -620,39 +620,63 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 	private void executeSqlInsertIntoTimeseries(int id, String strTuple, String prefix) throws SQLException {
 
-		AddTupleRequestParseResult param = parseAddTupleRequestBody(strTuple, prefix);
+		TimestampValues param = parseAddTupleRequestBody(strTuple, prefix);
+		String format[] = prefix.split("_");
+
+		if (format.length != param.values.size()) {
+			throwInvalidTupleFormat(format);
+		}
 
 		String sql = "UPDATE " + prefix + "streams "
 				+ "SET tuples = PutElem(tuples, "
-				+ "row('" + param.timestamp.toString() + "', " + param.values + ")::" + prefix + "rowtype) "
-				+ "WHERE id=?";
+				+ "row(?,";
+		for (int i = 0; i < param.values.size(); i++) {
+			sql += "?,";
+		}
+		sql = sql.substring(0, sql.length() - 1);
+		sql += ")::" + prefix + "rowtype) WHERE id = ?";
 
 		PreparedStatement pstmt = null;
 		try {
 			pstmt = conn.prepareStatement(sql);
-			pstmt.setInt(1, id);
+			pstmt.setTimestamp(1, param.timestamp);
+			int i;
+			for (i = 0; i < param.values.size(); i++) {
+				if (format[i].equals("int")) {
+					pstmt.setInt(i+2, (Integer)param.values.get(i));
+				} else if (format[i].equals("float")) {
+					pstmt.setDouble(i+2, (Double)param.values.get(i));
+				} else if (format[i].equals("text")) {
+					pstmt.setString(i+2, (String)param.values.get(i));
+				} else {
+					throwInvalidTupleFormat(format);
+				}
+			}
+			pstmt.setInt(i + 2, id);
 			pstmt.executeUpdate();
 		} catch (SQLException e) {
 			if (e.toString().contains("Extra characters at the end of a datetime or interval."))
 				throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
 			else if (e.toString().contains("No cast from ROW")) 
-				throwInvalidTupleFormat(prefix.split("_"));
+				throwInvalidTupleFormat(format);
 			else 
 				throw e;
+		} catch (ClassCastException e) {
+			throwInvalidTupleFormat(format);
 		} finally {
 			if (pstmt != null) 
 				pstmt.close();
 		}
 	}
 
-	private AddTupleRequestParseResult parseAddTupleRequestBody(String strTuple, String prefix) {
+	private TimestampValues parseAddTupleRequestBody(String strTuple, String prefix) {
 		Object objTuple = JSONValue.parse(strTuple);
-		String values = "";
+		List<Object> values = new ArrayList<Object>();
 		Timestamp timestamp = null;
-		String[] format = prefix.split("_");
 
 		if (objTuple instanceof JSONArray) {
 			boolean isFirst = true;
+			
 			for (Object obj: (JSONArray)objTuple) {
 				if (isFirst) {
 					if (obj == null)
@@ -662,7 +686,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 					}
 					isFirst = false;
 				} else {
-					values += obj.toString() + ", ";
+					values.add(obj);
 				}
 			}
 		} else if (objTuple instanceof JSONObject) {
@@ -674,17 +698,15 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				timestamp = parseTimestamp(objTimestamp);
 			}
 			JSONArray tuples = (JSONArray)json.get("tuple");
-
+			
 			for (Object obj: tuples) {
-				values += obj.toString() + ", ";
+				values.add(obj);
 			}
 		} else {
-			throwInvalidTupleFormat(format);
+			throwInvalidTupleFormat(prefix.split("_"));
 		}
 
-		values = values.substring(0, values.length() - 2);
-
-		return new AddTupleRequestParseResult(timestamp, values);
+		return new TimestampValues(timestamp, values);
 	}
 
 	private Timestamp parseTimestamp(Object obj) {
@@ -706,11 +728,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		throw new IllegalArgumentException("Invalid tuple data type. Expected tuple format: " + tupleFormat);
 	}
 
-	private class AddTupleRequestParseResult {
+	private class TimestampValues {
 		public Timestamp timestamp;
-		public String values;
+		public List<Object> values;
 
-		public AddTupleRequestParseResult(Timestamp timestamp, String values) {
+		public TimestampValues(Timestamp timestamp, List<Object> values) {
 			this.timestamp = timestamp;
 			this.values = values;
 		}

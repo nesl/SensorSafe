@@ -1,4 +1,4 @@
 sudo -v
-mvn package
+mvn clean package
 sudo cp target/sensorsafe.war /opt/jetty/webapps
 sudo service jetty restart

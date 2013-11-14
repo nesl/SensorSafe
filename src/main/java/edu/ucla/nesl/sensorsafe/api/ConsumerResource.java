@@ -5,7 +5,9 @@ import java.sql.SQLException;
 import java.util.List;
 
 import javax.annotation.security.RolesAllowed;
+import javax.mail.MessagingException;
 import javax.naming.NamingException;
+import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
@@ -30,6 +32,7 @@ import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.init.SensorSafeResourceConfig;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.model.User;
+import edu.ucla.nesl.sensorsafe.tools.MailSender;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
 @Path("consumers")
@@ -39,7 +42,10 @@ public class ConsumerResource {
 	
 	@Context
 	private SecurityContext securityContext;
-	
+
+	@Context 
+	private HttpServletRequest httpReq;
+
 	@RolesAllowed(Roles.OWNER)
 	@GET
     @ApiOperation(value = "List currently registered consumers on this server.", notes = "TBD")
@@ -69,6 +75,22 @@ public class ConsumerResource {
 		return users;
 	}
 
+	private String getApiBasePath() {
+		String addr = httpReq.getLocalAddr();
+		int port = httpReq.getLocalPort();
+		boolean isHttps = httpReq.isSecure();
+		
+		String basePath;
+		if (isHttps) {
+			basePath = "https://";
+		} else { 
+			basePath = "http://";
+		}
+		basePath += addr + ":" + port;
+		String apiBasePath = basePath + "/api";
+		return apiBasePath;
+	}
+	
 	@RolesAllowed(Roles.OWNER)
 	@POST
 	@Consumes(MediaType.APPLICATION_JSON)
@@ -88,7 +110,6 @@ public class ConsumerResource {
 		try {
 			db = DatabaseConnector.getUserDatabase();
 			newConsumer = db.addConsumer(newConsumer, ownerName);
-			SensorSafeResourceConfig.oauthProvider.registerConsumer(ownerName, newConsumer.oauthConsumerKey, newConsumer.oauthConsumerSecret, new MultivaluedHashMap<String, String>());
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
@@ -102,6 +123,17 @@ public class ConsumerResource {
 				}
 			}
 		}
+
+		SensorSafeResourceConfig.oauthProvider.registerConsumer(ownerName, newConsumer.oauthConsumerKey, newConsumer.oauthConsumerSecret, new MultivaluedHashMap<String, String>());
+		
+		if (newConsumer.email != null) {
+			try {
+				MailSender.sendConsumerEmail(newConsumer, ownerName, getApiBasePath());
+			} catch (MessagingException e) {
+				throw WebExceptionBuilder.buildInternalServerError(e);
+			}
+		}
+		
 		return new ResponseMsg("Successfully added a consumer.");
 	}
 	

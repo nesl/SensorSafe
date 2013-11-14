@@ -28,7 +28,7 @@ import edu.ucla.nesl.sensorsafe.oauth.SensorSafeOAuth1Provider;
 import edu.ucla.nesl.sensorsafe.oauth.SensorSafeOAuth1Provider.Token;
 import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 
-@Path("oauth")
+@Path(SensorSafeResourceConfig.AUTHORIZE_API_PATH)
 @Api(value = "oauth", description = "OAuth operations.")
 public class OAuthResource {
 	
@@ -38,7 +38,6 @@ public class OAuthResource {
 	private SecurityContext securityContext;
 	
 	@GET
-	@Path("/authorize")
 	@Produces(MediaType.TEXT_PLAIN)
     @ApiOperation(value = "Authorize OAuth Request Token.", notes = "TBD")
     @ApiResponses(value = {

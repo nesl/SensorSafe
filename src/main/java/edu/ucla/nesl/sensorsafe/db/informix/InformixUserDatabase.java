@@ -175,6 +175,7 @@ public class InformixUserDatabase extends InformixDatabaseDriver implements User
 		PreparedStatement pstmt = null;
 		String consumerKey = newUUIDString();
 		String consumerSecret = newUUIDString();
+		String apikey = newUUIDString();
 		try {
 			pstmt = conn.prepareStatement("INSERT INTO " + USERS_TABLE + " (" 
 					+ USERNAME_FIELD + "," 
@@ -193,7 +194,7 @@ public class InformixUserDatabase extends InformixDatabaseDriver implements User
 			pstmt.setString(5, consumerKey);
 			pstmt.setString(6, consumerSecret);
 			pstmt.setString(7, newConsumer.email);
-			pstmt.setString(8, newUUIDString());
+			pstmt.setString(8, apikey);
 			pstmt.executeUpdate();
 			pstmt.close();
 		} catch (SQLException e) {
@@ -205,10 +206,11 @@ public class InformixUserDatabase extends InformixDatabaseDriver implements User
 			if (pstmt != null) 
 				pstmt.close();
 		}
-		newConsumer.password = null;
-		newConsumer.role = Roles.CONSUMER;
-		newConsumer.oauthConsumerKey = consumerKey;
-		newConsumer.oauthConsumerSecret = consumerSecret;
+		newConsumer.setPassword(null);
+		newConsumer.setRole(Roles.CONSUMER);
+		newConsumer.setOAuthConsumerKey(consumerKey);
+		newConsumer.setOAuthConsumerSecret(consumerSecret);;
+		newConsumer.setApikey(apikey);
 		return newConsumer;
 	}
 

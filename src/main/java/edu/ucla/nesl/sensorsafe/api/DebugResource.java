@@ -21,7 +21,6 @@ import com.wordnik.swagger.annotations.ApiResponses;
 
 import edu.ucla.nesl.sensorsafe.auth.Roles;
 import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
-import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.ResponseMsg;
 import edu.ucla.nesl.sensorsafe.tools.MailSender;

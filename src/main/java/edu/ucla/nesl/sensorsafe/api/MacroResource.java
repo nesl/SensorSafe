@@ -20,6 +20,7 @@ import javax.ws.rs.core.SecurityContext;
 
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
+import com.wordnik.swagger.annotations.ApiParam;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
 
@@ -72,7 +73,10 @@ public class MacroResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-    public ResponseMsg doPost(@Valid Macro macro) {
+    public ResponseMsg doPost(
+    		@ApiParam(name = "macro", value = "You can use macro in rule condition or query filter by $(MACRO_NAME). "
+    				+ "They will be replaced with the value.")
+    		@Valid Macro macro) {
     	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {

@@ -20,6 +20,7 @@ import javax.ws.rs.core.SecurityContext;
 
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
+import com.wordnik.swagger.annotations.ApiParam;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
 
@@ -72,7 +73,9 @@ public class RuleResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-    public ResponseMsg doPost(@Valid Rule rule) {
+    public ResponseMsg doPost(
+    		@ApiParam(name = "rule", value = "Please refer to the description below.")
+    		@Valid Rule rule) {
     	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {

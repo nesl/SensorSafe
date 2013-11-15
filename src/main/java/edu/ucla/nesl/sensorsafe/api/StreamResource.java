@@ -254,13 +254,7 @@ public class StreamResource {
 			@QueryParam("http_streaming") 				final boolean isHttpStreaming,
 			@QueryParam("start_time") 					final String startTime, 
 			@QueryParam("end_time") 					final String endTime,
-			@ApiParam(name = "filter", 
-				value = "Any SQL expression on timestamp and channel names.<br><br>"
-						+ "Additional expressions supported:<br><br>"
-						+ "- Cron time in [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]:<br>"
-						+ "  e.g., [ * * 9-18 * * 1-5 ]<br><br>"
-						+ "- SQL date time part SECOND, MINUTE, HOUR, DAY, MONTH, WEEKDAY(0-6 Sun-Sat), YEAR:<br>"
-						+ "  e.g., WEEKDAY(timestamp)<br><br>")
+			@ApiParam(name = "filter", value = "Please refer to the description below.")
 			@QueryParam("filter") 						final String filter,
 			@ApiParam(name = "function", value = "WIP. Query test function.")  
 			@QueryParam("function") 					final String function ,

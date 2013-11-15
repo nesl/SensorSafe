@@ -1,82 +1,120 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>SensorSafe API Explorer</title>
-  <link href='http://fonts.googleapis.com/css?family=Droid+Sans:400,700' rel='stylesheet' type='text/css'/>
-  <link href='css/highlight.default.css' media='screen' rel='stylesheet' type='text/css'/>
-  <link href='css/screen.css' media='screen' rel='stylesheet' type='text/css'/>
-  <script type="text/javascript" src="lib/shred.bundle.js" /></script>  
-  <script src='lib/jquery-1.8.0.min.js' type='text/javascript'></script>
-  <script src='lib/jquery.slideto.min.js' type='text/javascript'></script>
-  <script src='lib/jquery.wiggle.min.js' type='text/javascript'></script>
-  <script src='lib/jquery.ba-bbq.min.js' type='text/javascript'></script>
-  <script src='lib/handlebars-1.0.0.js' type='text/javascript'></script>
-  <script src='lib/underscore-min.js' type='text/javascript'></script>
-  <script src='lib/backbone-min.js' type='text/javascript'></script>
-  <script src='lib/swagger.js' type='text/javascript'></script>
-  <script src='swagger-ui.js' type='text/javascript'></script>
-  <script src='lib/highlight.7.3.pack.js' type='text/javascript'></script>
-  <script type="text/javascript">
-    $(function () {
-      window.swaggerUi = new SwaggerUi({
-      url: "/api/api-docs",
-      dom_id: "swagger-ui-container",
-      supportedSubmitMethods: ['get', 'post', 'put', 'delete'],
-      onComplete: function(swaggerApi, swaggerUi){
-        if(console) {
-          console.log("Loaded SwaggerUI")
-        }
-        $('pre code').each(function(i, e) {hljs.highlightBlock(e)});
-      },
-      onFailure: function(data) {
-        if(console) {
-          console.log("Unable to Load SwaggerUI");
-          console.log(data);
-        }
-      },
-      docExpansion: "none"
-    });
+<title>SensorSafe API Explorer</title>
+<link href='http://fonts.googleapis.com/css?family=Droid+Sans:400,700'
+	rel='stylesheet' type='text/css' />
+<link href='css/highlight.default.css' media='screen' rel='stylesheet'
+	type='text/css' />
+<link href='css/screen.css' media='screen' rel='stylesheet'
+	type='text/css' />
+<script type="text/javascript" src="lib/shred.bundle.js" /></script>
+<script src='lib/jquery-1.8.0.min.js' type='text/javascript'></script>
+<script src='lib/jquery.slideto.min.js' type='text/javascript'></script>
+<script src='lib/jquery.wiggle.min.js' type='text/javascript'></script>
+<script src='lib/jquery.ba-bbq.min.js' type='text/javascript'></script>
+<script src='lib/handlebars-1.0.0.js' type='text/javascript'></script>
+<script src='lib/underscore-min.js' type='text/javascript'></script>
+<script src='lib/backbone-min.js' type='text/javascript'></script>
+<script src='lib/swagger.js' type='text/javascript'></script>
+<script src='swagger-ui.js' type='text/javascript'></script>
+<script src='lib/highlight.7.3.pack.js' type='text/javascript'></script>
+<script type="text/javascript">
+	$(function() {
+		window.swaggerUi = new SwaggerUi({
+			url : "/api/api-docs",
+			dom_id : "swagger-ui-container",
+			supportedSubmitMethods : [ 'get', 'post', 'put', 'delete' ],
+			onComplete : function(swaggerApi, swaggerUi) {
+				if (console) {
+					console.log("Loaded SwaggerUI")
+				}
+				$('pre code').each(function(i, e) {
+					hljs.highlightBlock(e)
+				});
+			},
+			onFailure : function(data) {
+				if (console) {
+					console.log("Unable to Load SwaggerUI");
+					console.log(data);
+				}
+			},
+			docExpansion : "none"
+		});
 
-    $('#input_apiKey').change(function() {
-      var key = $('#input_apiKey')[0].value;
-      console.log("key: " + key);
-      if(key && key.trim() != "") {
-        console.log("added key " + key);
-        window.authorizations.add("key", new ApiKeyAuthorization("api-key", key, "header"));
-      }
-    })
-    window.swaggerUi.load();
-  });
-
-  </script>
+		$('#input_apiKey').change(
+				function() {
+					var key = $('#input_apiKey')[0].value;
+					console.log("key: " + key);
+					if (key && key.trim() != "") {
+						console.log("added key " + key);
+						window.authorizations.add("key",
+								new ApiKeyAuthorization("api-key", key,
+										"header"));
+					}
+				})
+		window.swaggerUi.load();
+	});
+</script>
 </head>
 
 <body>
-<div id='header'>
-  <div class="swagger-ui-wrap">
-    <a id="logo">SensorSafe</a>
+	<div id='header'>
+		<div class="swagger-ui-wrap">
+			<a id="logo">SensorSafe</a>
+			<form id='api_selector'>
+				<div class='input icon-btn'>
+					<img id="show-pet-store-icon" src="images/pet_store_api.png"
+						title="Show Swagger Petstore Example Apis">
+				</div>
+				<div class='input icon-btn'>
+					<img id="show-wordnik-dev-icon" src="images/wordnik_api.png"
+						title="Show Wordnik Developer Apis">
+				</div>
+				<div class='input'>
+					<input placeholder="http://example.com/api" id="input_baseUrl"
+						name="baseUrl" type="text" />
+				</div>
+				<div class='input'>
+					<input placeholder="api_key" id="input_apiKey" name="apiKey"
+						type="text" />
+				</div>
+				<div class='input'>
+					<a id="explore" href="#">Explore</a>
+				</div>
+			</form>
+		</div>
+	</div>
 
-    <form id='api_selector'>
-      <div class='input icon-btn'>
-        <img id="show-pet-store-icon" src="images/pet_store_api.png" title="Show Swagger Petstore Example Apis">
-      </div>
-      <div class='input icon-btn'>
-        <img id="show-wordnik-dev-icon" src="images/wordnik_api.png" title="Show Wordnik Developer Apis">
-      </div>
-      <div class='input'><input placeholder="http://example.com/api" id="input_baseUrl" name="baseUrl" type="text"/></div>
-      <div class='input'><input placeholder="api_key" id="input_apiKey" name="apiKey" type="text"/></div>
-      <div class='input'><a id="explore" href="#">Explore</a></div>
-    </form>
-  </div>
-</div>
+	<div id="message-bar" class="swagger-ui-wrap">&nbsp;</div>
 
-<div id="message-bar" class="swagger-ui-wrap">
-  &nbsp;
-</div>
+	<div id="swagger-ui-container" class="swagger-ui-wrap"></div>
 
-<div id="swagger-ui-container" class="swagger-ui-wrap">
-
-</div>
+	<div>
+	<h2>About query filter and rule condition...</h2>
+	
+	You can use any valid SQL expression with variable name "timestamp" and channel names defined for the stream.<br>
+	<br>
+	For example, <br/>
+	- timestamp between '2013-03-07 09:00:00' and '2013-03-14 18:00:00'<br/>
+	- value > 1.5 and value < 2.0<br/>
+	<br/>
+	Additional expressions supported:<br/>
+	<br/>
+	- Cron time in [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]<br>
+	e.g., [ * * 9-18 * * 1-5 ]<br>
+	<br/>
+	- SQL date time part SECOND, MINUTE, HOUR, DAY, MONTH, WEEKDAY(0-6 Sun-Sat), YEAR<br>
+	e.g., WEEKDAY(timestamp)<br>
+	<br/>
+	- Macros: e.g., $(MACRO_NAME)<br/>
+	<br/>
+	- Condition on other stream in OTHER_STREAM_NAME.CHANNEL_NAME<br/>
+	e.g., activity.value = 'still'<br/>
+    <br/>
+    <h2>About rule actions..</h2>
+    Currently, "allow" or "deny" is supported.<br/>
+	</div>
 
 </body>
 

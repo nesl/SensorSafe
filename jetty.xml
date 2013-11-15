@@ -42,7 +42,7 @@
 				<Set name="ServerName">sensorsafe</Set>
 				<Set name="User">informix</Set>
 				<Set name="Password">sensorsafe!</Set>
-				<Set name="DatabaseName">sensoract</Set>
+				<Set name="DatabaseName">sensorsafe</Set>
 				<Set name="IfxIFXHOST">sensorsafe</Set>
 				<Set name="PortNumber">61000</Set>
 				<Set name="IfxCPMMaxConnections">-1</Set>
@@ -64,7 +64,7 @@
 				<Set name="ServerName">sensorsafe</Set>
 				<Set name="User">informix</Set>
 				<Set name="Password">sensorsafe!</Set>
-				<Set name="DatabaseName">sensoract</Set>
+				<Set name="DatabaseName">sensorsafe</Set>
 				<Set name="IfxIFXHOST">sensorsafe</Set>
 				<Set name="PortNumber">61000</Set>
 				<Set name="DataSourceName">java:comp/env/jdbc/informix-cpds</Set>

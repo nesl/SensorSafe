@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,6 +32,7 @@ import net.minidev.json.JSONValue;
 
 import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
+import org.joda.time.Duration;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
@@ -42,6 +44,7 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class InformixStreamDatabase extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -70,9 +73,14 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	private static final String SQL_DATE_TIME_PATTERN_WITH_FRACTION = "yyyy-MM-dd HH:mm:ss.SSSSS";
 	private static final String SQL_DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 	
+	private static final String CRON_TIME_REGULAR_EXPR = "\\[[\\d\\s-,\\*]+\\]";
+	private static final long QUERY_DURATION_LIMIT = 7;
+	
 	private PreparedStatement storedPstmt;
 	private ResultSet storedResultSet;
 	private Stream storedStream;
+	private String storedTempTableName;
+	private String storedTempViewName;
 
 	static {
 		try {
@@ -80,6 +88,42 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		} catch (ClassNotFoundException | SQLException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private void dropStoredTempVirtualTable() throws SQLException {
+		if (storedTempTableName != null) {
+			Statement stmt = null;
+			try {
+				stmt = conn.createStatement();
+				stmt.execute("DROP TABLE IF EXISTS " + storedTempTableName);				
+			} finally {
+				if (stmt != null) {
+					stmt.close();
+				}
+			}
+		}
+		storedTempTableName = null;
+	}
+
+	private void dropStoredTempView() throws SQLException {
+		if (storedTempViewName != null) {
+			Statement stmt = null;
+			try {
+				stmt = conn.createStatement();
+				stmt.execute("DROP VIEW IF EXISTS " + storedTempViewName);				
+			} finally {
+				if (stmt != null) {
+					stmt.close();
+				}
+			}
+		}
+		storedTempViewName = null;
+	}
+
+	@Override
+	public void close() throws SQLException {
+		dropTemps();
+		super.close();
 	}
 	
 	@Override
@@ -205,7 +249,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 					+ "name VARCHAR(100) NOT NULL, "
 					+ "tags VARCHAR(255), "
 					+ "channels LIST(ROW(name VARCHAR(100),type VARCHAR(100)) NOT NULL), "
-					+ "UNIQUE (owner, name) CONSTRAINT owner_stream_name);");
+					+ "UNIQUE (owner, name) CONSTRAINT owner_stream_name) LOCK MODE ROW;");
 		} 
 		finally {
 			if (stmt != null)
@@ -228,7 +272,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 					+ "target_users SET(VARCHAR(100) NOT NULL), "
 					+ "target_streams SET(VARCHAR(100) NOT NULL), "
 					+ "condition VARCHAR(255), "
-					+ "action VARCHAR(255) NOT NULL);");
+					+ "action VARCHAR(255) NOT NULL) LOCK MODE ROW;");
 		} 
 		finally {
 			if (stmt != null)
@@ -249,7 +293,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 					+ "id SERIAL PRIMARY KEY NOT NULL, "
 					+ "owner VARCHAR(100) NOT NULL, "
 					+ "macro_name VARCHAR(255) NOT NULL, "
-					+ "macro_value VARCHAR(255) NOT NULL);");
+					+ "macro_value VARCHAR(255) NOT NULL) LOCK MODE ROW;");
 		} 
 		finally {
 			if (stmt != null)
@@ -739,7 +783,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	}
 
 	private String processCronTimeExpression(String expr) {
-		Pattern cronExprPattern = Pattern.compile("\\[[\\d\\s-,\\*]+\\]");
+		Pattern cronExprPattern = Pattern.compile(CRON_TIME_REGULAR_EXPR);
 		Matcher matcher = cronExprPattern.matcher(expr);
 		while (matcher.find()) {
 			String cronStr = matcher.group();
@@ -815,8 +859,433 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		
 		return expr;
 	}
+	
+	private DateTime getDateTimeFromString(String timestamp) {
 
+		DateTimeFormatter isoFmt = ISODateTimeFormat.dateTime();
+		DateTimeFormatter sqlFmt = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN);
+		DateTimeFormatter sqlFmtFraction = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN_WITH_FRACTION);
+
+		DateTime dt = null;
+		
+		try {
+			dt = sqlFmtFraction.parseDateTime(timestamp);
+		} catch (IllegalArgumentException e) {
+			try {
+				dt = isoFmt.parseDateTime(timestamp);
+			} catch (IllegalArgumentException e1) {
+				try {
+					dt = sqlFmt.parseDateTime(timestamp);
+				} catch (IllegalArgumentException e2) {
+					throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
+				}
+			}
+		}
+		
+		return dt;
+	}
+	
+	private void checkStartEndTime(DateTime start, DateTime end) {
+		if (start.isAfter(end)) {
+			throw new IllegalArgumentException("start_time must be before end_time.");
+		}
+		
+		Duration duration = new Duration(start, end);
+		
+		if (duration.getStandardDays() > QUERY_DURATION_LIMIT) {
+			throw new IllegalArgumentException("Duration limit between start_time and end_time is violated. Current limit is " + QUERY_DURATION_LIMIT + " days.");
+		}
+	}
+
+	protected String newUUIDString() {
+		String tmp = UUID.randomUUID().toString();
+		return tmp.replaceAll("-", "");
+	}
+	
+	private boolean prepareQueryWithView(
+			String requestingUser,
+			String streamOwner, 
+			String streamName, 
+			String startTime, 
+			String endTime, 
+			String filter, 
+			int limit, 
+			int offset) 
+				throws SQLException {
+		
+		if (startTime == null || endTime == null) {
+			throw new IllegalArgumentException("Start time and end time are required for this query.");
+		}
+
+		DateTime start = getDateTimeFromString(startTime);
+		DateTime end = getDateTimeFromString(endTime);
+
+		checkStartEndTime(start, end);
+		
+		PreparedStatement pstmt = null;
+		try {
+			Stream stream = getStreamInfo(streamOwner, streamName);
+			String prefix = getChannelFormatPrefix(stream.channels);
+
+			Timestamp startTs = new Timestamp(start.getMillis());
+			Timestamp endTs = new Timestamp(end.getMillis());
+			
+			String tempViewName = "view_" + newUUIDString();
+			String viewSql = "CREATE VIEW " + tempViewName + " AS "
+					+ "SELECT * FROM " + prefix + "vtable"
+					+ " WHERE id = " + stream.id 
+					+ " AND timestamp BETWEEN '" + startTs.toString() + "' AND '" + endTs.toString() +"'";
+			Log.info(viewSql);
+			Log.info("Creating a view..");
+			pstmt = conn.prepareStatement(viewSql);
+			pstmt.execute();
+			pstmt.close();
+			
+			storedTempViewName = tempViewName;
+			
+			// Prepare sql statement.
+			String sql = "SELECT";
+			if (offset > 0) {
+				sql += " SKIP ?";
+			}
+			if (limit > 0) {
+				sql += " FIRST ?";
+			}
+			sql += " * FROM " + tempViewName; 
+
+			if (filter != null) {
+				sql += " WHERE ( " + filter + " )";
+			}
+			
+			if (!streamOwner.equals(requestingUser)) {
+				String ruleCond = applyRules(streamOwner, requestingUser, stream);
+				if (ruleCond == null) {
+					// No allow rules for non-owner.
+					return false;
+				} else {
+					if (filter == null) {
+						sql += " WHERE " + ruleCond;
+					} else {
+						sql += " AND " + ruleCond;
+					}
+				}
+			}
+			sql = convertMacros(streamOwner, sql);
+			sql = processCronTimeExpression(sql);
+			sql = convertCStyleBooleanOperators(sql);
+			sql = convertChannelNames(stream.channels, sql);
+			sql = convertDateTimePartExpression(sql);
+			
+			pstmt = conn.prepareStatement(sql);
+			int i = 1;
+			if (offset > 0) {
+				pstmt.setInt(i, offset);
+				i+= 1;
+			}
+			if (limit > 0) {
+				pstmt.setInt(i, limit);
+				i += 1;
+			}
+
+			Log.info("Executing query..");
+			ResultSet rset = pstmt.executeQuery();
+			Log.info("Done.");
+			
+			storedPstmt = pstmt;
+			storedResultSet = rset;
+			storedStream = stream;
+		} catch (SQLException e) {
+			if (pstmt != null)
+				pstmt.close();
+			throw e;
+		}
+		return true;
+
+	}
+
+	private boolean prepareQueryWithClip(
+			String requestingUser,
+			String streamOwner, 
+			String streamName, 
+			String startTime, 
+			String endTime, 
+			String filter, 
+			int limit, 
+			int offset) 
+				throws SQLException {
+		
+		if (startTime == null || endTime == null) {
+			throw new IllegalArgumentException("Start time and end time are required for this query.");
+		}
+
+		DateTime start = getDateTimeFromString(startTime);
+		DateTime end = getDateTimeFromString(endTime);
+
+		checkStartEndTime(start, end);
+		
+		PreparedStatement pstmt = null;
+		try {
+			Stream stream = getStreamInfo(streamOwner, streamName);
+			String prefix = getChannelFormatPrefix(stream.channels);
+
+			Timestamp startTs = new Timestamp(start.getMillis());
+			Timestamp endTs = new Timestamp(end.getMillis());
+			
+			// Create a temporary timeseries
+			String tempTableName = "streams_" + newUUIDString();
+			String tempVirtualTableName = "vtable_" + tempTableName;
+			Log.info("Creating temp table..");
+			pstmt = conn.prepareStatement("CREATE TEMP TABLE " + tempTableName + "(id int, tuples TimeSeries(" + prefix + "rowtype)) LOCK MODE ROW");  
+			pstmt.execute();
+			pstmt.close();
+			Log.info("Creating virtual table..");
+			pstmt = conn.prepareStatement("EXECUTE PROCEDURE TSCreateVirtualTab(?,?)");
+			pstmt.setString(1, tempVirtualTableName);
+			pstmt.setString(2, tempTableName);
+			pstmt.execute();
+			pstmt.close();			
+			Log.info("Clipping timeseries..");
+			pstmt = conn.prepareStatement("INSERT INTO " + tempTableName
+					+ " SELECT 1, Clip(tuples,?,?) FROM " + prefix + "streams WHERE id = ?");
+			pstmt.setTimestamp(1, startTs);
+			pstmt.setTimestamp(2, endTs);
+			pstmt.setInt(3, stream.id);
+			pstmt.executeUpdate();
+			pstmt.close();
+			
+			storedTempTableName = tempVirtualTableName;
+			
+			Log.info("Executing query..");
+			// Prepare sql statement.
+			String sql = "SELECT";
+			if (offset > 0) {
+				sql += " SKIP ?";
+			}
+			if (limit > 0) {
+				sql += " FIRST ?";
+			}
+			sql += " * FROM " + tempVirtualTableName + " WHERE id = 1"; 
+
+			if (filter != null) {
+				sql += " AND ( " + filter + " )";
+			}
+			
+			if (!streamOwner.equals(requestingUser)) {
+				String rule = applyRules(streamOwner, requestingUser, stream);
+				if (rule == null) {
+					// No allow rules for non-owner.
+					return false;
+				}
+				sql += " AND " + rule;
+			}
+			sql = convertMacros(streamOwner, sql);
+			sql = processCronTimeExpression(sql);
+			sql = convertCStyleBooleanOperators(sql);
+			sql = convertChannelNames(stream.channels, sql);
+			sql = convertDateTimePartExpression(sql);
+			
+			//Log.info(sql);
+			
+			pstmt = conn.prepareStatement(sql);
+			int i = 1;
+			if (offset > 0) {
+				pstmt.setInt(i, offset);
+				i+= 1;
+			}
+			if (limit > 0) {
+				pstmt.setInt(i, limit);
+				i += 1;
+			}
+
+			ResultSet rset = pstmt.executeQuery();
+
+			storedPstmt = pstmt;
+			storedResultSet = rset;
+			storedStream = stream;
+		} catch (SQLException e) {
+			if (pstmt != null)
+				pstmt.close();
+			throw e;
+		}
+		return true;
+
+	}
+
+	private boolean prepareQueryWithoutClip(
+			String requestingUser,
+			String streamOwner, 
+			String streamName, 
+			String startTime, 
+			String endTime, 
+			String filter, 
+			int limit, 
+			int offset) 
+				throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			Stream stream = getStreamInfo(streamOwner, streamName);
+			String prefix = getChannelFormatPrefix(stream.channels);
+
+			Timestamp startTs = null, endTs = null;
+			try {
+				if (startTime != null) 
+					startTs = Timestamp.valueOf(startTime);
+				if (endTime != null)
+					endTs = Timestamp.valueOf(endTime);
+			} catch (IllegalArgumentException e) {
+				throw new IllegalArgumentException(MSG_INVALID_TIMESTAMP_FORMAT);
+			}
+
+			// Prepare sql statement.
+			String sql = "SELECT";
+			if (offset > 0) {
+				sql += " SKIP ?";
+			}
+			if (limit > 0) {
+				sql += " FIRST ?";
+			}
+			sql += " * FROM " + prefix + "vtable " + "WHERE id = ?"; 
+
+			if (startTs != null) 
+				sql += " AND timestamp >= ?";
+			if (endTs != null)
+				sql += " AND timestamp <= ?";
+			if (filter != null) {
+				sql += " AND ( " + filter + " )";
+			}
+			
+			if (!streamOwner.equals(requestingUser)) {
+				String rule = applyRules(streamOwner, requestingUser, stream);
+				if (rule == null) {
+					// No allow rules for non-owner.
+					return false;
+				}
+				sql += " AND " + rule; 
+			}
+			sql = convertMacros(streamOwner, sql);
+			sql = processCronTimeExpression(sql);
+			sql = convertCStyleBooleanOperators(sql);
+			sql = convertChannelNames(stream.channels, sql);
+			sql = convertDateTimePartExpression(sql);
+			
+			//Log.info(sql + " (" + limit + ", " + stream.id + ")");
+			
+			pstmt = conn.prepareStatement(sql);
+			int i = 1;
+			if (offset > 0) {
+				pstmt.setInt(i, offset);
+				i+= 1;
+			}
+			if (limit > 0) {
+				pstmt.setInt(i, limit);
+				i += 1;
+			}
+			pstmt.setInt(i, stream.id);
+			i += 1;
+			if (startTs != null) {
+				pstmt.setTimestamp(i, startTs);
+				i += 1;
+			}
+			if (endTs != null) {
+				pstmt.setTimestamp(i, endTs);
+				i += 1;
+			}
+
+			ResultSet rset = pstmt.executeQuery();
+
+			storedPstmt = pstmt;
+			storedResultSet = rset;
+			storedStream = stream;
+		} catch (SQLException e) {
+			if (pstmt != null)
+				pstmt.close();
+			throw e;
+		}
+		return true;
+
+	}
+	
+	private boolean isTimeRuleExist(String streamOwner, String requestingUser, String streamName) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			String sql = "SELECT condition FROM rules "
+						+ "WHERE owner = ? "
+							+ "AND (? IN target_streams OR target_streams IS NULL) "
+							+ "AND (? IN target_users OR target_users IS NULL )";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, streamOwner);
+			pstmt.setString(2, streamName);
+			pstmt.setString(3, requestingUser);
+			ResultSet rset = pstmt.executeQuery();
+			if (rset.next()) {
+				String condition = rset.getString(1);
+				if (isTimeExpression(condition)) {
+					return true;
+				}				
+			}
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		}
+		return false;
+	}
+	
+	private boolean isTimeExpression(String expr) {
+		if (expr == null) {
+			return false;
+		}
+		if (expr.contains("timestamp")) {
+			return true;
+		}
+		Pattern cronExprPattern = Pattern.compile(CRON_TIME_REGULAR_EXPR);
+		Matcher matcher = cronExprPattern.matcher(expr);
+		if (matcher.find()) {
+			return true;
+		}
+		return false;
+	}
+	
+	private boolean prepareQueryV2(
+			String requestingUser,
+			String streamOwner, 
+			String streamName, 
+			String startTime, 
+			String endTime, 
+			String filter, 
+			int limit, 
+			int offset) 
+				throws SQLException {
+		
+		// Check if stream name exists.
+		if ( !isStreamNameExist(streamOwner, streamName) )
+			throw new IllegalArgumentException("Stream (" + streamName + ") of owner (" + streamOwner + ") does not exists.");
+
+		// Determine if we need to do clip first.
+		if (!streamOwner.equals(requestingUser) && isTimeRuleExist(streamOwner, requestingUser, streamName)) {
+			//return prepareQueryWithClip(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
+			return prepareQueryWithView(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
+		} else {
+			return prepareQueryWithoutClip(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
+		}
+	}
+	
+	
+	@Override
 	public boolean prepareQuery(
+			String requestingUser,
+			String streamOwner, 
+			String streamName, 
+			String startTime, 
+			String endTime, 
+			String filter, 
+			int limit, 
+			int offset) 
+				throws SQLException {
+		return prepareQueryV1(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
+	}
+	
+	private boolean prepareQueryV1(
 			String requestingUser,
 			String streamOwner, 
 			String streamName, 
@@ -865,11 +1334,12 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			}
 			
 			if (!streamOwner.equals(requestingUser)) {
-				sql = applyRules(streamOwner, requestingUser, sql, stream);
-				if (sql == null) {
+				String rule = applyRules(streamOwner, requestingUser, stream);
+				if (rule == null) {
 					// No allow rules for non-owner.
 					return false;
 				}
+				sql += " AND " + rule; 
 			}
 			sql = convertMacros(streamOwner, sql);
 			sql = processCronTimeExpression(sql);
@@ -878,6 +1348,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			sql = convertDateTimePartExpression(sql);
 			
 			//Log.info(sql + " (" + limit + ", " + stream.id + ")");
+			Log.info(sql);
 			
 			pstmt = conn.prepareStatement(sql);
 			int i = 1;
@@ -913,10 +1384,16 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return true;
 	}
 
+	private void dropTemps() throws SQLException {
+		dropStoredTempVirtualTable();
+		dropStoredTempView();
+	}
+	
 	private void cleanUpStoredInfo() throws SQLException {
 		if (storedPstmt != null) { 
 			storedPstmt.close();
 		}
+		dropTemps();
 		storedResultSet = null;
 		storedPstmt = null;
 		storedStream = null;
@@ -958,7 +1435,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 
-	private String applyRules(String streamOwner, String requestingUser, String oriSql, Stream stream) throws SQLException {
+	private String applyRules(String streamOwner, String requestingUser, Stream stream) throws SQLException {
 		PreparedStatement pstmt = null;
 		String ruleCond = null;
 		try {
@@ -1011,7 +1488,8 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			if (pstmt != null) 
 				pstmt.close();
 		}
-		return ruleCond != null ? oriSql + " AND " + ruleCond : oriSql;
+		
+		return ruleCond;
 	}
 
 	private String convertCStyleBooleanOperators(String expr) {

@@ -83,6 +83,8 @@ public class RuleResource {
     		db.addOrUpdateRule(ownerName, rule);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
 		} finally {
 			if (db != null) {
 				try {

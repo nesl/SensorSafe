@@ -18,6 +18,9 @@ public class Rule {
 	@ApiModelProperty(value = "Unique id for this rule.")
 	public int id;
 	
+	@XmlElement(name = "priority")
+	public int priority = Integer.MAX_VALUE;
+	
 	@XmlElement(name = "target_users")
 	@ApiModelProperty(value = "List of user names for this rule to be applied. If null, always applied.")
 	public List<String> targetUsers;
@@ -38,7 +41,7 @@ public class Rule {
 	
 	public Rule() {}
 	
-	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action) {
+	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action, int priority) {
 		this.id = id;
 		if (targetUsers != null)  {
 			this.targetUsers = new LinkedList<String>();
@@ -54,5 +57,6 @@ public class Rule {
 		}
 		this.condition = condition;
 		this.action = action;
+		this.priority = priority;
 	}
 }

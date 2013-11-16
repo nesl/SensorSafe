@@ -55,7 +55,8 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 	private static final String ORIGIN_TIMESTAMP = "2000-01-01 00:00:00.00000";
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
-
+	private static final String[] VALID_RULE_ACTIONS = { "allow", "deny" }; 
+		
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
 	private static final String MSG_INVALID_CRON_EXPRESSION = "Invalid cron expression. Expects [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]";
 	private static final String MSG_UNSUPPORTED_TUPLE_FORMAT = "Unsupported tuple format.";
@@ -287,6 +288,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			stmt.execute("CREATE TABLE rules ("
 					+ "id SERIAL PRIMARY KEY NOT NULL, "
 					+ "owner VARCHAR(100) NOT NULL, "
+					+ "priority BIGINT, "
 					+ "target_users SET(VARCHAR(100) NOT NULL), "
 					+ "target_streams SET(VARCHAR(100) NOT NULL), "
 					+ "condition VARCHAR(255), "
@@ -345,7 +347,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		PreparedStatement pstmt = null;
 		List<Rule> rules = new ArrayList<Rule>();
 		try {
-			String sql = "SELECT id, target_users, target_streams, condition, action FROM rules WHERE owner = ?";
+			String sql = "SELECT id, target_users, target_streams, condition, action, priority FROM rules WHERE owner = ?";
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, owner);
 			ResultSet rset = pstmt.executeQuery();
@@ -355,7 +357,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
 				sqlArr = rset.getArray(3);
 				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
-				rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5)));
+				rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5), rset.getInt(6)));
 			}
 		} finally {
 			if (pstmt != null)
@@ -364,9 +366,29 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return rules;
 	}
 
+	private void validateRule(Rule rule) {
+		if (rule.action == null) {
+			throw new IllegalArgumentException("action is null.");
+		}
+		boolean isValid = false;
+		for (String validAction: VALID_RULE_ACTIONS) {
+			if (rule.action.equalsIgnoreCase(validAction)) {
+				isValid = true;
+			}
+		}
+		if (!isValid) {
+			throw new IllegalArgumentException("Invalid rule action. Valid actions are: " + StringUtils.join(VALID_RULE_ACTIONS, ", "));
+		}
+		isValid = false;
+		if (rule.priority < 1) {
+			throw new IllegalArgumentException("priority must be greater than or equal to 1.");
+		}
+	}
+	
 	@Override
 	public void addOrUpdateRule(String owner, Rule rule) throws SQLException {
-		PreparedStatement pstmt = null;
+		validateRule(rule);
+		
 		String targetUsers = null;
 		if (rule.targetUsers != null) {
 			targetUsers = "SET{";
@@ -376,6 +398,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			targetUsers = targetUsers.substring(0, targetUsers.length() - 2);
 			targetUsers += "}";
 		}
+		
 		String targetStreams = null;
 		if (rule.targetStreams != null) {
 			targetStreams = "SET{";
@@ -385,10 +408,12 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			targetStreams = targetStreams.substring(0, targetStreams.length() - 2);
 			targetStreams += "}";
 		}
+		
+		PreparedStatement pstmt = null;
 		try {
 			String sql;
 			if (rule.id == 0) {
-				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action) VALUES (?,?,?,?,?)";
+				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority) VALUES (?,?,?,?,?,?)";
 			} else {
 				pstmt = conn.prepareStatement("SELECT 1 FROM rules WHERE id = ?");
 				pstmt.setInt(1, rule.id);
@@ -398,9 +423,10 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 							+ "target_users = ?, "
 							+ "target_streams = ?, "
 							+ "condition = ?, "
-							+ "action = ? WHERE id = ?";
+							+ "action = ?, "
+							+ "priority = ? WHERE id = ?";
 				} else {
-					sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, id) VALUES (?,?,?,?,?,?)";
+					sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, id, priority) VALUES (?,?,?,?,?,?,?)";
 				}
 			}
 			if (pstmt != null)
@@ -410,9 +436,13 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			pstmt.setString(2, targetUsers);
 			pstmt.setString(3, targetStreams);
 			pstmt.setString(4, rule.condition);
-			pstmt.setString(5, rule.action);
-			if (rule.id != 0)
+			pstmt.setString(5, rule.action);			
+			if (rule.id != 0) {
 				pstmt.setInt(6, rule.id);
+				pstmt.setInt(7, rule.priority);
+			} else {
+				pstmt.setInt(6, rule.priority);
+			}
 			pstmt.executeUpdate();
 		} finally {
 			if (pstmt != null) 
@@ -950,7 +980,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 					// No allow rules for non-owner.
 					return false;
 				}
-				sql += " AND " + rule; 
+				sql += " AND ( " + rule + " )"; 
 			}
 			sql = convertMacros(streamOwner, sql);
 			sql = processCronTimeExpression(sql);
@@ -1252,56 +1282,103 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		String ruleCond = null;
 		try {
 			String sql;
-			String allowRuleCond = null;
-			String denyRuleCond = null;
 
-			if (requestingUser == null) 
-				sql = "SELECT condition FROM rules WHERE owner = ? AND action = ? AND ( ? IN target_streams OR target_streams IS NULL )";
-			else
-				sql = "SELECT condition FROM rules WHERE owner = ? AND action = ? AND ( ? IN target_streams OR target_streams IS NULL) AND ( ? IN target_users OR target_users IS NULL )";
+			if (requestingUser == null) {
+				sql = "SELECT priority, condition, action "
+						+ "FROM rules "
+						+ "WHERE owner = ? "
+							+ "AND ( ? IN target_streams OR target_streams IS NULL ) "
+						+ "ORDER BY priority DESC;";
+			} else {
+				sql = "SELECT priority, condition, action "
+						+ "FROM rules "
+						+ "WHERE owner = ? "
+							+ "AND ( ? IN target_streams OR target_streams IS NULL) "
+							+ "AND ( ? IN target_users OR target_users IS NULL ) "
+						+ "ORDER BY priority DESC;";
+			}
 
 			// Process allow rules			
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, streamOwner);
-			pstmt.setString(2, "allow");
-			pstmt.setString(3, stream.name);
-			pstmt.setString(4, requestingUser);
+			pstmt.setString(2, stream.name);
+			if (requestingUser != null) {
+				pstmt.setString(3, requestingUser);
+			}
+			
 			ResultSet rset = pstmt.executeQuery();
-			List<String> sqlFragList = new LinkedList<String>();
+			
+			int prevPriority = -1;
+			List<String> allowConds = new ArrayList<String>();
+			List<String> denyConds = new ArrayList<String>();
 			while (rset.next()) {
-				String condition = rset.getString(1);				
-				sqlFragList.add("( " + condition + " )"); 
+				int priority = rset.getInt(1);
+				String condition = rset.getString(2);
+				String action = rset.getString(3);
+				
+				if (prevPriority == -1) {
+					prevPriority = priority; 
+				}
+				
+				// Collect conditions in same priority
+				if (prevPriority == priority) {
+					addCurrentRule(allowConds, denyConds, action, condition);
+				} else {
+					// If priority changes, merge and add to ruleCond.
+					
+					if (ruleCond == null && allowConds.isEmpty()) {
+						// Ignore only deny rules with the least priority
+						denyConds.clear();
+						prevPriority = priority;
+						addCurrentRule(allowConds, denyConds, action, condition);
+						continue;
+					}
+					
+					ruleCond = addConditionsToRuleCond(ruleCond, allowConds, denyConds);
+					
+					// Process current priority.
+					allowConds.clear();
+					denyConds.clear();
+					addCurrentRule(allowConds, denyConds, action, condition);
+				}
+				
+				prevPriority = priority;
 			}
-
-			if (sqlFragList.size() > 0) {
-				allowRuleCond = "( " + StringUtils.join(sqlFragList, " OR ") + " )";
-			} else {
-				// No allow rules.
-				return null;
-			}
-
-			// Process deny rules
-			pstmt.setString(2, "deny");
-			rset = pstmt.executeQuery();
-			sqlFragList = new LinkedList<String>();
-			while (rset.next()) {
-				String condition = rset.getString(1);
-				sqlFragList.add("( " + condition + " )"); 
-			}
-			if (sqlFragList.size() > 0)
-				denyRuleCond = "NOT ( " + StringUtils.join(sqlFragList, " OR ") + " )";
-
-			// Merge allow and deny rules.
-			ruleCond = allowRuleCond;
-			if (denyRuleCond != null) {
-				ruleCond += " AND " + denyRuleCond;
-			}
+			
+			// Process final rules
+			ruleCond = addConditionsToRuleCond(ruleCond, allowConds, denyConds);		
 		} finally {
 			if (pstmt != null) 
 				pstmt.close();
 		}
 
 		return ruleCond;
+	}
+
+	private String addConditionsToRuleCond(String ruleCond, List<String> allowConds, List<String> denyConds) {
+		if (!allowConds.isEmpty()) {
+			if (ruleCond == null) { 
+				ruleCond = "( " + StringUtils.join(allowConds, " OR ") + " )";
+			} else {
+				ruleCond = "( " + ruleCond + " ) OR ( " + StringUtils.join(allowConds, " OR ") + " )";
+			}
+		}
+		if (!denyConds.isEmpty()) {
+			if (ruleCond == null) {
+				assert false;
+			} else {
+				ruleCond = "( " + ruleCond + " ) AND NOT ( " + StringUtils.join(denyConds, " OR ") + " )";
+			}
+		}
+		return ruleCond;
+	}
+
+	private void addCurrentRule(List<String> allowConds, List<String> denyConds, String action, String condition) {
+		if (action.equalsIgnoreCase("allow")) {
+			allowConds.add("( " + condition + " )");
+		} else if (action.equalsIgnoreCase("deny")) {
+			denyConds.add("( " + condition + " )");
+		}
 	}
 
 	private String convertCStyleBooleanOperators(String expr) {

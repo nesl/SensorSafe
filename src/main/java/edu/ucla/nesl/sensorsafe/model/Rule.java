@@ -39,6 +39,9 @@ public class Rule {
 	@NotNull
 	public String action;
 	
+	@XmlElement(name = "template_name")
+	public String templateName;
+	
 	public Rule() {}
 	
 	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action, int priority) {
@@ -58,5 +61,10 @@ public class Rule {
 		this.condition = condition;
 		this.action = action;
 		this.priority = priority;
+	}
+	
+	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action, int priority, String templateName) {
+		this(id, targetUsers, targetStreams, condition, action, priority);
+		this.templateName = templateName;
 	}
 }

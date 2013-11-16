@@ -12,13 +12,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.model.TemplateParameterDefinition;
 
 public interface StreamDatabaseDriver extends DatabaseDriver {
 	
 	public List<Rule> getRules(String owner) 
 			throws SQLException;
 	
-	public void addOrUpdateRule(String owner, Rule rule) 
+	public void addUpdateRuleTemplate(String owner, Rule rule) 
 			throws SQLException;
 	
 	public void deleteAllRules(String owner) 
@@ -67,4 +68,13 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void deleteAllMacros(String owner) throws SQLException;
 
 	public void deleteMacro(String owner, int id, String name) throws SQLException;
+
+	public void deleteTemplate(String ownerName, int id, String templateName) throws SQLException;
+
+	public void deleteAllTemplates(String ownerName) throws SQLException;
+
+	public List<Rule> getTemplates(String ownerName) throws SQLException;
+
+	public void createRuleFromTemplate(String ownerName,
+			TemplateParameterDefinition params) throws SQLException;
 }

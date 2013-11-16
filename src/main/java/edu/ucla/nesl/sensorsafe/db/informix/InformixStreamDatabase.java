@@ -45,6 +45,8 @@ import edu.ucla.nesl.sensorsafe.model.Channel;
 import edu.ucla.nesl.sensorsafe.model.Macro;
 import edu.ucla.nesl.sensorsafe.model.Rule;
 import edu.ucla.nesl.sensorsafe.model.Stream;
+import edu.ucla.nesl.sensorsafe.model.TemplateParameter;
+import edu.ucla.nesl.sensorsafe.model.TemplateParameterDefinition;
 
 public class InformixStreamDatabase extends InformixDatabaseDriver implements StreamDatabaseDriver {
 
@@ -56,11 +58,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	private static final String ORIGIN_TIMESTAMP = "2000-01-01 00:00:00.00000";
 	private static final String VALID_TIMESTAMP_FORMAT = "\"YYYY-MM-DD HH:MM:SS.[SSSSS]\"";
 	private static final String[] VALID_RULE_ACTIONS = { "allow", "deny" }; 
-		
+
 	private static final String MSG_INVALID_TIMESTAMP_FORMAT = "Invalid timestamp format. Expected format is " + VALID_TIMESTAMP_FORMAT;
 	private static final String MSG_INVALID_CRON_EXPRESSION = "Invalid cron expression. Expects [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]";
 	private static final String MSG_UNSUPPORTED_TUPLE_FORMAT = "Unsupported tuple format.";
-	
+
 	private static final String DATETIME_SECOND = "timestamp::DATETIME SECOND TO SECOND::CHAR(2)::INT";
 	private static final String DATETIME_MINUTE = "timestamp::DATETIME MINUTE TO MINUTE::CHAR(2)::INT";
 	private static final String DATETIME_HOUR = "timestamp::DATETIME HOUR TO HOUR::CHAR(2)::INT";
@@ -291,8 +293,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 					+ "priority BIGINT, "
 					+ "target_users SET(VARCHAR(100) NOT NULL), "
 					+ "target_streams SET(VARCHAR(100) NOT NULL), "
-					+ "condition VARCHAR(255), "
-					+ "action VARCHAR(255) NOT NULL) LOCK MODE ROW;");
+					+ "condition VARCHAR(255) NOT NULL, "
+					+ "action VARCHAR(255) NOT NULL, "
+					+ "template_name VARCHAR(255)) LOCK MODE ROW;");
 		} 
 		finally {
 			if (stmt != null)
@@ -342,30 +345,6 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return prefix;
 	}
 
-	@Override
-	public List<Rule> getRules(String owner) throws SQLException {
-		PreparedStatement pstmt = null;
-		List<Rule> rules = new ArrayList<Rule>();
-		try {
-			String sql = "SELECT id, target_users, target_streams, condition, action, priority FROM rules WHERE owner = ?";
-			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, owner);
-			ResultSet rset = pstmt.executeQuery();
-			while (rset.next()) {
-				int id = rset.getInt(1);
-				Array sqlArr = rset.getArray(2);
-				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
-				sqlArr = rset.getArray(3);
-				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
-				rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5), rset.getInt(6)));
-			}
-		} finally {
-			if (pstmt != null)
-				pstmt.close();
-		}
-		return rules;
-	}
-
 	private void validateRule(Rule rule) {
 		if (rule.action == null) {
 			throw new IllegalArgumentException("action is null.");
@@ -384,11 +363,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			throw new IllegalArgumentException("priority must be greater than or equal to 1.");
 		}
 	}
-	
+
 	@Override
-	public void addOrUpdateRule(String owner, Rule rule) throws SQLException {
+	public void addUpdateRuleTemplate(String owner, Rule rule) throws SQLException {
 		validateRule(rule);
-		
+
 		String targetUsers = null;
 		if (rule.targetUsers != null) {
 			targetUsers = "SET{";
@@ -398,7 +377,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			targetUsers = targetUsers.substring(0, targetUsers.length() - 2);
 			targetUsers += "}";
 		}
-		
+
 		String targetStreams = null;
 		if (rule.targetStreams != null) {
 			targetStreams = "SET{";
@@ -408,12 +387,28 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			targetStreams = targetStreams.substring(0, targetStreams.length() - 2);
 			targetStreams += "}";
 		}
-		
+
 		PreparedStatement pstmt = null;
+		if (rule.templateName != null) {
+			try {
+				pstmt = conn.prepareStatement("SELECT * FROM rules WHERE template_name = ?");
+				pstmt.setString(1, rule.templateName);
+				ResultSet rset = pstmt.executeQuery();
+				if (rset.next()) {
+					throw new IllegalArgumentException("Template name already registered.");
+				}
+			} finally {
+				if (pstmt != null) {
+					pstmt.close();
+					pstmt = null;
+				}
+			}
+		}
+		
 		try {
 			String sql;
 			if (rule.id == 0) {
-				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority) VALUES (?,?,?,?,?,?)";
+				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority, template_name) VALUES (?,?,?,?,?,?,?)";
 			} else {
 				pstmt = conn.prepareStatement("SELECT 1 FROM rules WHERE id = ?");
 				pstmt.setInt(1, rule.id);
@@ -424,9 +419,10 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 							+ "target_streams = ?, "
 							+ "condition = ?, "
 							+ "action = ?, "
-							+ "priority = ? WHERE id = ?";
+							+ "priority = ?, "
+							+ "template_name = ? WHERE id = ?";
 				} else {
-					sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, id, priority) VALUES (?,?,?,?,?,?,?)";
+					sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, id, priority, template_name) VALUES (?,?,?,?,?,?,?,?)";
 				}
 			}
 			if (pstmt != null)
@@ -440,8 +436,10 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			if (rule.id != 0) {
 				pstmt.setInt(6, rule.id);
 				pstmt.setInt(7, rule.priority);
+				pstmt.setString(8, rule.templateName);
 			} else {
 				pstmt.setInt(6, rule.priority);
+				pstmt.setString(7, rule.templateName);
 			}
 			pstmt.executeUpdate();
 		} finally {
@@ -451,10 +449,34 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	}
 
 	@Override
+	public List<Rule> getRules(String owner) throws SQLException {
+		PreparedStatement pstmt = null;
+		List<Rule> rules = new ArrayList<Rule>();
+		try {
+			String sql = "SELECT id, target_users, target_streams, condition, action, priority FROM rules WHERE owner = ? AND template_name IS NULL";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, owner);
+			ResultSet rset = pstmt.executeQuery();
+			while (rset.next()) {
+				int id = rset.getInt(1);
+				Array sqlArr = rset.getArray(2);
+				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
+				sqlArr = rset.getArray(3);
+				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
+				rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5), rset.getInt(6)));
+			}
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+		return rules;
+	}
+
+	@Override
 	public void deleteAllRules(String owner) throws SQLException {
 		PreparedStatement pstmt = null;
 		try {
-			pstmt = conn.prepareStatement("DELETE FROM rules WHERE owner = ?");
+			pstmt = conn.prepareStatement("DELETE FROM rules WHERE owner = ? AND template_name IS NULL");
 			pstmt.setString(1, owner);
 			pstmt.executeUpdate();
 		} finally {
@@ -467,7 +489,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	public void deleteRule(String owner, int id) throws SQLException {
 		PreparedStatement pstmt = null;
 		try {
-			pstmt = conn.prepareStatement("DELETE FROM rules WHERE owner = ? AND id = ?");
+			pstmt = conn.prepareStatement("DELETE FROM rules WHERE owner = ? AND id = ? AND template_name IS NULL");
 			pstmt.setString(1, owner);
 			pstmt.setInt(2, id);
 			pstmt.executeUpdate();
@@ -1000,7 +1022,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				i += 1;
 			}
 			pstmt.setInt(i, stream.id);
-		
+
 			if (storedTempTableName == null || !sql.contains(storedTempTableName)) {
 				i += 1;
 				if (startTs != null) {
@@ -1095,9 +1117,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 		DateTime start = getDateTimeFromString(startTime);
 		DateTime end = getDateTimeFromString(endTime);
-		
+
 		checkStartEndTime(start, end);
-		
+
 		Timestamp startTs = new Timestamp(start.getMillis());
 		Timestamp endTs = new Timestamp(end.getMillis());
 
@@ -1148,7 +1170,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			idx++;
 		}
 		createRowtype = createRowtype.substring(0, createRowtype.length() - 2) + ")";
-		
+
 		PreparedStatement pstmt = null;
 		try {
 			pstmt = conn.prepareStatement(createRowtype);
@@ -1183,7 +1205,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 		// Generate Union() sql
 		String executeUnion = "INSERT INTO " + tempTable + " SELECT " + stream.id + ", Union('" + startTs.toString() + "'::DATETIME YEAR TO FRACTION(5), '" + endTs.toString() + "'::DATETIME YEAR TO FRACTION(5), t1.tuples, ";
-	
+
 		for (idx = 2; idx <= otherStreamMap.keySet().size() + 1; idx++) {
 			executeUnion += "t" + idx + ".tuples, ";
 		}
@@ -1215,13 +1237,13 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 		// Replace FROM prefix_vtable WHERE id = ? --> FROM temp_vtable WHERE id = 1 in sql.
 		sql = sql.replace(" FROM " + getChannelFormatPrefix(stream.channels) + "vtable WHERE id = ? AND timestamp >= ? AND timestamp <= ? "
-						, " FROM " + tempVTable + " WHERE id = ? ");
+				, " FROM " + tempVTable + " WHERE id = ? ");
 
 		// Replace channel name on other streams.
 		for (Entry<String, String> entry: conversion.entrySet()) {
 			sql = sql.replace(entry.getKey(), entry.getValue());
 		}
-		
+
 		return sql;
 	}
 
@@ -1287,14 +1309,14 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				sql = "SELECT priority, condition, action "
 						+ "FROM rules "
 						+ "WHERE owner = ? "
-							+ "AND ( ? IN target_streams OR target_streams IS NULL ) "
+						+ "AND ( ? IN target_streams OR target_streams IS NULL ) "
 						+ "ORDER BY priority DESC;";
 			} else {
 				sql = "SELECT priority, condition, action "
 						+ "FROM rules "
 						+ "WHERE owner = ? "
-							+ "AND ( ? IN target_streams OR target_streams IS NULL) "
-							+ "AND ( ? IN target_users OR target_users IS NULL ) "
+						+ "AND ( ? IN target_streams OR target_streams IS NULL) "
+						+ "AND ( ? IN target_users OR target_users IS NULL ) "
 						+ "ORDER BY priority DESC;";
 			}
 
@@ -1305,9 +1327,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			if (requestingUser != null) {
 				pstmt.setString(3, requestingUser);
 			}
-			
+
 			ResultSet rset = pstmt.executeQuery();
-			
+
 			int prevPriority = -1;
 			List<String> allowConds = new ArrayList<String>();
 			List<String> denyConds = new ArrayList<String>();
@@ -1315,17 +1337,17 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				int priority = rset.getInt(1);
 				String condition = rset.getString(2);
 				String action = rset.getString(3);
-				
+
 				if (prevPriority == -1) {
 					prevPriority = priority; 
 				}
-				
+
 				// Collect conditions in same priority
 				if (prevPriority == priority) {
 					addCurrentRule(allowConds, denyConds, action, condition);
 				} else {
 					// If priority changes, merge and add to ruleCond.
-					
+
 					if (ruleCond == null && allowConds.isEmpty()) {
 						// Ignore only deny rules with the least priority
 						denyConds.clear();
@@ -1333,18 +1355,18 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 						addCurrentRule(allowConds, denyConds, action, condition);
 						continue;
 					}
-					
+
 					ruleCond = addConditionsToRuleCond(ruleCond, allowConds, denyConds);
-					
+
 					// Process current priority.
 					allowConds.clear();
 					denyConds.clear();
 					addCurrentRule(allowConds, denyConds, action, condition);
 				}
-				
+
 				prevPriority = priority;
 			}
-			
+
 			// Process final rules
 			ruleCond = addConditionsToRuleCond(ruleCond, allowConds, denyConds);		
 		} finally {
@@ -1861,5 +1883,118 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			if (pstmt != null)
 				pstmt.close();
 		}
+	}
+
+	@Override
+	public void deleteTemplate(String ownerName, int id, String templateName) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			String sql = "DELETE FROM rules WHERE owner = ?";
+
+			if (id > 0) {
+				sql += " AND id = ?";
+			}
+			if (templateName != null) {
+				sql += " AND template_name = ?";
+			}
+
+			pstmt = conn.prepareStatement(sql);
+
+			pstmt.setString(1, ownerName);
+
+			int i = 2;
+			if (id > 0) {
+				pstmt.setInt(i, id);
+				i++;
+			}
+			if (templateName != null) {
+				pstmt.setString(i, templateName);
+				i++;
+			}
+
+			pstmt.executeUpdate();
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+	}
+
+	@Override
+	public void deleteAllTemplates(String ownerName) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			pstmt = conn.prepareStatement("DELETE FROM rules WHERE owner = ? AND template_name IS NOT NULL");
+			pstmt.setString(1, ownerName);
+			pstmt.executeUpdate();
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+	}
+
+	@Override
+	public List<Rule> getTemplates(String ownerName) throws SQLException {
+		PreparedStatement pstmt = null;
+		List<Rule> templates = new ArrayList<Rule>();
+		try {
+			String sql = "SELECT id, target_users, target_streams, condition, action, priority, template_name FROM rules WHERE owner = ? AND template_name IS NOT NULL";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, ownerName);
+			ResultSet rset = pstmt.executeQuery();
+			while (rset.next()) {
+				int id = rset.getInt(1);
+				Array sqlArr = rset.getArray(2);
+				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
+				sqlArr = rset.getArray(3);
+				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
+				templates.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5), rset.getInt(6), rset.getString(7)));
+			}
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+		return templates;
+	}
+
+	@Override
+	public void createRuleFromTemplate(String ownerName, TemplateParameterDefinition params) throws SQLException {
+		PreparedStatement pstmt = null;
+		try {
+			String sql = "SELECT target_users, target_streams, condition, action, priority FROM rules WHERE owner = ? AND template_name = ?";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, ownerName);
+			pstmt.setString(2, params.base_template_name);
+			ResultSet rset = pstmt.executeQuery();
+			if (rset.next()) {
+				Array targetUsers = rset.getArray(1);
+				Array targetStreams = rset.getArray(2);
+				String condition = applyTemplateParams(params.parameters, rset.getString(3));
+				String action = rset.getString(4);
+				int priority = params.priority;
+				
+				pstmt.close();
+				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority) VALUES (?,?,?,?,?,?)";
+				pstmt = conn.prepareStatement(sql);
+				pstmt.setString(1, ownerName);
+				pstmt.setArray(2, targetUsers);
+				pstmt.setArray(3, targetStreams);
+				pstmt.setString(4, condition);
+				pstmt.setString(5, action);
+				pstmt.setInt(6, priority);
+				pstmt.executeUpdate();
+			} else {
+				throw new IllegalArgumentException("Template (" + params.base_template_name + " doesn't exists.");						
+			}
+		} finally {
+			if (pstmt != null) 
+				pstmt.close();
+		}
+	}
+
+	private String applyTemplateParams(List<TemplateParameter> params, String expr) {
+		for (TemplateParameter param: params) {
+			expr = expr.replace("$(" + param.name + ")", param.value);
+		}
+		return expr;
 	}
 }

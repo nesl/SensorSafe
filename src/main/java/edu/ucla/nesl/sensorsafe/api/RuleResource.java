@@ -80,7 +80,7 @@ public class RuleResource {
     	StreamDatabaseDriver db = null;
     	try {
     		db = DatabaseConnector.getStreamDatabase();
-    		db.addOrUpdateRule(ownerName, rule);
+    		db.addUpdateRuleTemplate(ownerName, rule);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {

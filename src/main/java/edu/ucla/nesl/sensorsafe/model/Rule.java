@@ -23,11 +23,11 @@ public class Rule {
 	
 	@XmlElement(name = "target_users")
 	@ApiModelProperty(value = "List of user names for this rule to be applied. If null, always applied.")
-	public List<String> targetUsers;
+	public List<String> target_users;
 	
 	@XmlElement(name = "target_streams")
 	@ApiModelProperty(value = "List of stream names for this rule to be applied. If null, applied to all streams.")
-	public List<String> targetStreams;
+	public List<String> target_streams;
 	
 	@XmlElement(name = "condition")
 	@ApiModelProperty(value = "Rule condition.")
@@ -40,22 +40,22 @@ public class Rule {
 	public String action;
 	
 	@XmlElement(name = "template_name")
-	public String templateName;
+	public String template_name;
 	
 	public Rule() {}
 	
 	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action, int priority) {
 		this.id = id;
 		if (targetUsers != null)  {
-			this.targetUsers = new LinkedList<String>();
+			this.target_users = new LinkedList<String>();
 			for (Object user: targetUsers) {
-				this.targetUsers.add((String)user);
+				this.target_users.add((String)user);
 			}
 		}
 		if (targetStreams != null)  {
-			this.targetStreams = new LinkedList<String>();
+			this.target_streams = new LinkedList<String>();
 			for (Object stream: targetStreams) {
-				this.targetStreams.add((String)stream);
+				this.target_streams.add((String)stream);
 			}
 		}
 		this.condition = condition;
@@ -65,6 +65,6 @@ public class Rule {
 	
 	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action, int priority, String templateName) {
 		this(id, targetUsers, targetStreams, condition, action, priority);
-		this.templateName = templateName;
+		this.template_name = templateName;
 	}
 }

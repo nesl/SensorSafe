@@ -34,7 +34,16 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	/*
 	 * Returns false if no data are allowed.
 	 */
-	public boolean prepareQuery(String requestingUser, String streamOwner, String streamName, String startTime, String endTime, String expr, int limit, int offset) 
+	public boolean prepareQuery(
+			String requestingUser, 
+			String streamOwner, 
+			String streamName, 
+			String startTime, 
+			String endTime,
+			String aggregator,
+			String filter, 
+			int limit, 
+			int offset) 
 			throws SQLException, JsonProcessingException;
 	
 	public Stream getStreamInfo(String owner, String name) 

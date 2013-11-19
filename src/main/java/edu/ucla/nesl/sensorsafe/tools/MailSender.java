@@ -54,8 +54,8 @@ public class MailSender {
 				+ "Your Api-Key: " + newConsumer.apikey + "<br/>"
 				+ "<br/>"
 				+ "OAuth1 Access Information:<br/>"
-				+ "Consumer Key: " + newConsumer.oauthConsumerKey + "<br/>"
-				+ "Consumer Secret: " + newConsumer.oauthConsumerSecret + "<br/>"
+				+ "Consumer Key: " + newConsumer.oauth_consumer_key + "<br/>"
+				+ "Consumer Secret: " + newConsumer.oauth_consumer_secret + "<br/>"
 				+ "Request Token API: " + requestTokenApi + "<br/>"
 				+ "Authroize API: " + authorizeApi + "<br/>"
 				+ "Access Token API: " + accessTokenApi;

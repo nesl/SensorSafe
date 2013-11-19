@@ -34,16 +34,16 @@ public class User {
 	public String apikey;
 	
 	@XmlElement(name = "oauth_consumer_key")
-	public String oauthConsumerKey;
+	public String oauth_consumer_key;
 	
 	@XmlElement(name = "oauth_consumer_secret")
-	public String oauthConsumerSecret;
+	public String oauth_consumer_secret;
 	
 	@XmlElement(name = "oauth_access_key")
-	public String oauthAccessKey;
+	public String oauth_access_key;
 	
 	@XmlElement(name = "oauth_access_secret")
-	public String oauthAccessSecret;
+	public String oauth_access_secret;
 	
 	public User() {}
 
@@ -72,18 +72,18 @@ public class User {
 	}
 	
 	public void setOAuthConsumerKey(String oauthConsumerKey) {
-		this.oauthConsumerKey = oauthConsumerKey;
+		this.oauth_consumer_key = oauthConsumerKey;
 	}
 	
 	public void setOAuthConsumerSecret(String oauthConsumerSecret) {
-		this.oauthConsumerSecret = oauthConsumerSecret;
+		this.oauth_consumer_secret = oauthConsumerSecret;
 	}
 
 	public void setOAuthAccessKey(String oauthAccessKey) {
-		this.oauthAccessKey = oauthAccessKey;
+		this.oauth_access_key = oauthAccessKey;
 	}
 	
 	public void setOAuthAccessSecret(String oauthAccessSecret) {
-		this.oauthAccessSecret = oauthAccessSecret;
+		this.oauth_access_secret = oauthAccessSecret;
 	}
 }

@@ -65,12 +65,12 @@ public class SensorSafeOAuth1Provider implements OAuth1Provider {
 		}
 		
 		for (User consumer: consumers) {
-			registerConsumer(consumer.owner, consumer.oauthConsumerKey, consumer.oauthConsumerSecret
+			registerConsumer(consumer.owner, consumer.oauth_consumer_key, consumer.oauth_consumer_secret
 					, new MultivaluedHashMap<String, String>());
-			if ( consumer.oauthAccessKey != null && consumer.oauthAccessSecret != null) {
+			if ( consumer.oauth_access_key != null && consumer.oauth_access_secret != null) {
 				Set<String> roles = new HashSet<String>();
 				roles.add(Roles.CONSUMER);		
-				addAccessToken(consumer.oauthAccessKey, consumer.oauthAccessSecret, consumer.oauthConsumerKey
+				addAccessToken(consumer.oauth_access_key, consumer.oauth_access_secret, consumer.oauth_consumer_key
 						, null, new SensorSafePrincipal(consumer.username), roles, new MultivaluedHashMap<String, String>());
 			}
 		}

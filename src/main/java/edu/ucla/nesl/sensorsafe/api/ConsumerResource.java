@@ -124,7 +124,7 @@ public class ConsumerResource {
 			}
 		}
 
-		SensorSafeResourceConfig.oauthProvider.registerConsumer(ownerName, newConsumer.oauthConsumerKey, newConsumer.oauthConsumerSecret, new MultivaluedHashMap<String, String>());
+		SensorSafeResourceConfig.oauthProvider.registerConsumer(ownerName, newConsumer.oauth_consumer_key, newConsumer.oauth_consumer_secret, new MultivaluedHashMap<String, String>());
 		
 		if (newConsumer.email != null) {
 			try {
@@ -152,8 +152,8 @@ public class ConsumerResource {
 		try {
 			db = DatabaseConnector.getUserDatabase();
 			User deletedConsumer = db.deleteConsumer(consumerName, ownerName);
-			if (deletedConsumer != null && deletedConsumer.oauthAccessKey != null) {
-				SensorSafeResourceConfig.oauthProvider.revokeAccessToken(deletedConsumer.oauthAccessKey, deletedConsumer.username);
+			if (deletedConsumer != null && deletedConsumer.oauth_access_key != null) {
+				SensorSafeResourceConfig.oauthProvider.revokeAccessToken(deletedConsumer.oauth_access_key, deletedConsumer.username);
 			}
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);

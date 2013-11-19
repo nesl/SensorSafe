@@ -90,32 +90,6 @@
 
 	<div id="swagger-ui-container" class="swagger-ui-wrap"></div>
 
-	<div>
-	<h2>About query filter and rule condition...</h2>
-	
-	You can use any valid SQL expression with variable name "timestamp" and channel names defined for the stream.<br>
-	<br>
-	For example, <br/>
-	- timestamp between '2013-03-07 09:00:00' and '2013-03-14 18:00:00'<br/>
-	- value > 1.5 and value < 2.0<br/>
-	<br/>
-	Additional expressions supported:<br/>
-	<br/>
-	- Cron time in [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]<br>
-	e.g., [ * * 9-18 * * 1-5 ]<br>
-	<br/>
-	- SQL date time part SECOND, MINUTE, HOUR, DAY, MONTH, WEEKDAY(0-6 Sun-Sat), YEAR<br>
-	e.g., WEEKDAY(timestamp)<br>
-	<br/>
-	- Macros: e.g., $(MACRO_NAME)<br/>
-	<br/>
-	- Condition on other stream in OTHER_STREAM_NAME.CHANNEL_NAME<br/>
-	e.g., activity.value = 'still'<br/>
-    <br/>
-    <h2>About rule actions..</h2>
-    Currently, "allow" or "deny" is supported.<br/>
-	</div>
-
 </body>
 
 </html>

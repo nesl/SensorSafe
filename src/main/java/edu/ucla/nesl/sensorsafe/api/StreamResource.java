@@ -54,6 +54,38 @@ import edu.ucla.nesl.sensorsafe.tools.WebExceptionBuilder;
 public class StreamResource {
 
 	private static final int ROW_LIMIT_WITHOUT_HTTP_STREAMING = 100;
+	
+	private static final String GET_STREAM_NOTES =
+			"filter<BR>"
+			+ "<BR>"
+			+ "- You can use any valid SQL expression with variable name 'timestamp' and channel names defined for the stream.<BR>"
+			+ "&emsp;  Examples:<BR>"
+			+ "&emsp;&emsp;	- timestamp between '2013-03-07 09:00:00' and '2013-03-14 18:00:00'<BR>"
+			+ "&emsp;&emsp;	- value > 1.5 and value < 2.0<BR>"
+			+ "<BR>"
+			+ "- Additional expressions:<BR>"
+			+ "&emsp; - Cron time: [ sec(0-59) min(0-59) hour(0-23) day of month(1-31) month(1-12) day of week(0-6,Sun-Sat) ]<BR>"
+			+ "&emsp;&emsp;	 e.g., [ * * 9-18 * * 1-5 ]<BR>"
+			+ "&emsp; - SQL date time parts: SECOND, MINUTE, HOUR, DAY, MONTH, WEEKDAY(0-6 Sun-Sat), YEAR<BR>"
+			+ "&emsp;&emsp;	 e.g., WEEKDAY(timestamp) between 1 and 5<BR>"
+			+ "&emsp; - Macros: e.g., $(MACRO_NAME)<BR>"
+			+ "&emsp; - Condition on other stream: OTHER_STREAM_NAME.CHANNEL_NAME<BR>"
+			+ "&emsp;&emsp;  e.g., activity.value = 'still'<BR>"
+			+ "<BR>"
+			+ "<BR>"
+			+ "aggregator<BR>"
+			+ "<BR>"
+			+ "- AggregateBy(expression, calendar)<BR>"
+			+ "&emsp;  Down sample time series to the calendar, e.g., every 1 seconds to every 1 hour.<BR>"
+			+ "<BR>"
+			+ "- AggregateRange(expression)<BR>"
+			+ "&emsp;  Calculate expression on entire range specified, e.g., average from January to June.<BR>"
+			+ "<BR>"
+			+ "+ expression: MIN, MAX, MEDIAN, SUM, AVG, FIRST, LAST, or Nth.<BR>"
+			+ "&emsp;  e.g., min($value), max($value), median($value), sum($value), avg($value), first($value), last($value), Nth($value, 10)<BR>"
+			+ "<BR>"
+			+ "+ calendar: 1min, 15min, 30min, 1hour, 1day, 1week, 1month, or 1year<BR>"
+			+ "<BR>";
 
 	@Context
 	private SecurityContext securityContext;
@@ -67,11 +99,11 @@ public class StreamResource {
 	public List<Stream> doGetAllStreams(
 			@ApiParam(name = "stream_owner", value = "If null, get currently authenticated user's streams.")
 			@QueryParam("stream_owner") String streamOwner) {
-		
+
 		if (streamOwner == null) {
 			streamOwner = securityContext.getUserPrincipal().getName();
 		}
-		
+
 		List<Stream> streams = null;
 		StreamDatabaseDriver db = null;
 		try {
@@ -167,8 +199,8 @@ public class StreamResource {
 					+ "2013-01-01 09:20:13.12345, 11.4, 3.2, 1.5\n"
 					+ "2013-01-01 09:20:14.12345, 10.4, 4.2, 7.5\n"
 					+ "</pre>")
-			String data) {
-		
+	String data) {
+
 		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
 		try {
@@ -201,7 +233,7 @@ public class StreamResource {
 	public ResponseMsg doPostStream(
 			@PathParam("stream_name") String streamName, 
 			@ApiParam(name = "str_tuple", 
-					value = "<pre>Usage:\n"
+			value = "<pre>Usage:\n"
 					+ "[ timestamp, 1st_channel, 2nd_channel, 3rd_channel, .. ]\n"
 					+ "\n"
 					+ "  e.g., [ \"2013-01-01 09:20:12.12345\", 12.4, 1.2, 5.5 ]\n"
@@ -243,7 +275,7 @@ public class StreamResource {
 	@RolesAllowed({ Roles.OWNER, Roles.CONSUMER })
 	@GET
 	@Path("/{stream_name}")
-	@ApiOperation(value = "Retrieve the stream.", notes = "TBD")
+	@ApiOperation(value = "Retrieve the stream.", notes = GET_STREAM_NOTES)
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
@@ -251,88 +283,86 @@ public class StreamResource {
 			@PathParam("stream_name") 					final String streamName,			
 			@ApiParam(name = "stream_owner", value = "If null, get currently authenticated user's streams.")
 			@QueryParam("stream_owner")					final String streamOwnerParam,
-			@QueryParam("http_streaming") 				final boolean isHttpStreaming,
+			@ApiParam(name = "start_time", value = "Expected format: YYYY-MM-DD HH:MM:SS.[SSSSS]")
 			@QueryParam("start_time") 					final String startTime, 
+			@ApiParam(name = "end_time", value = "Expected format: YYYY-MM-DD HH:MM:SS.[SSSSS]")
 			@QueryParam("end_time") 					final String endTime,
-			@ApiParam(name = "filter", value = "Please refer to the description below.")
+			@ApiParam(name = "filter", value = "Please refer to the above Implementation Notes.")
 			@QueryParam("filter") 						final String filter,
-			@ApiParam(name = "function", value = "WIP. Query test function.")  
-			@QueryParam("function") 					final String function ,
-			@ApiParam(name = "limit", value = "Default value 100.") 
+			@ApiParam(name = "aggregator", value = "Please refer to the above Implementation Notes.")
+			@QueryParam("aggregator")					final String aggregator,
+			@ApiParam(name = "limit", value = "Default value is 100.") 
 			@DefaultValue("100") @QueryParam("limit") 	final int limit,
-			@QueryParam("offset") 						final int offset) {
+			@ApiParam(name = "offset", value = "Default value is 0.") 
+			@QueryParam("offset") 						final int offset,
+			@ApiParam(name = "http_streaming", value = "Default value is true.") 
+			@DefaultValue("true") @QueryParam("http_streaming") final boolean isHttpStreaming
+			) {
 
 		StreamDatabaseDriver db = null;
 		final String requestingUser = securityContext.getUserPrincipal().getName();		
 		final String streamOwner = streamOwnerParam == null ? requestingUser : streamOwnerParam;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			if (function != null) {
-				if (function.equals("test")) {
-					db.queryStreamTest(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
-					return new ResponseMsg("Test function executed.");
-				} else {
-					throw WebExceptionBuilder.buildBadRequest("Unsupported function: " + function);
-				}
-			} else {
-				if (!isHttpStreaming && limit > ROW_LIMIT_WITHOUT_HTTP_STREAMING) {
-					throw WebExceptionBuilder.buildBadRequest("Too mcuh data requested without HTTP streaming.");
-				}
-				Stream stream = db.getStreamInfo(streamOwner, streamName);
-				ObjectMapper mapper = new ObjectMapper();
-				AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
-				mapper.setAnnotationIntrospector(introspector);
-				JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
-				String strJson = json.toString();
-				strJson = strJson.substring(0, strJson.length() - 1) + ",\"tuples\":[";
+			if (!isHttpStreaming && limit > ROW_LIMIT_WITHOUT_HTTP_STREAMING) {
+				throw WebExceptionBuilder.buildBadRequest("Too mcuh data requested without HTTP streaming.");
+			}
+			Stream stream = db.getStreamInfo(streamOwner, streamName);
+			ObjectMapper mapper = new ObjectMapper();
+			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
+			mapper.setAnnotationIntrospector(introspector);
+			JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
+			String strJson = json.toString();
+			strJson = strJson.substring(0, strJson.length() - 1) + ",\"tuples\":[";
 
-				if (!isHttpStreaming) {
-					boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
-					if (isData) {
-						JSONArray tuple = db.getNextJsonTuple();
-						if (tuple != null) {
-							strJson += tuple.toString();
-							while((tuple = db.getNextJsonTuple()) != null) {
-								strJson += "," + tuple.toString();
+			if (!isHttpStreaming) {
+				boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset);
+				if (isData) {
+					JSONArray tuple = db.getNextJsonTuple();
+					if (tuple != null) {
+						strJson += tuple.toString();
+						while((tuple = db.getNextJsonTuple()) != null) {
+							strJson += "," + tuple.toString();
+						}
+					}
+				}
+				return strJson + "]}";
+			} else {
+				final String strJsonOutput = strJson;
+				return new StreamingOutput() {
+					@Override
+					public void write(OutputStream output) throws IOException, WebApplicationException {
+						StreamDatabaseDriver db = null;
+						try {
+							db = DatabaseConnector.getStreamDatabase();
+							boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset);
+							IOUtils.write(strJsonOutput, output);
+							if (isData) {
+								JSONArray tuple;
+								tuple = db.getNextJsonTuple();
+								if (tuple != null) {
+									IOUtils.write(tuple.toString(), output);
+									while((tuple = db.getNextJsonTuple()) != null) {
+										IOUtils.write("," + tuple.toString(), output);
+									}
+								}
+							}
+							IOUtils.write("]}", output);
+						} catch (SQLException | ClassNotFoundException | NamingException | UnsupportedOperationException e) {
+							throw WebExceptionBuilder.buildInternalServerError(e);
+						} catch (IllegalArgumentException e) {
+							throw WebExceptionBuilder.buildBadRequest(e);
+						} finally {
+							if (db != null) {
+								try {
+									db.close();
+								} catch (SQLException e) {
+									e.printStackTrace();
+								}
 							}
 						}
 					}
-					return strJson + "]}";
-				} else {
-					final String strJsonOutput = strJson;
-					return new StreamingOutput() {
-						@Override
-						public void write(OutputStream output) throws IOException, WebApplicationException {
-							StreamDatabaseDriver db = null;
-							try {
-								db = DatabaseConnector.getStreamDatabase();
-								boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, filter, limit, offset);
-								IOUtils.write(strJsonOutput, output);
-								if (isData) {
-									JSONArray tuple;
-									tuple = db.getNextJsonTuple();
-									if (tuple != null) {
-										IOUtils.write(tuple.toString(), output);
-										while((tuple = db.getNextJsonTuple()) != null) {
-											IOUtils.write("," + tuple.toString(), output);
-										}
-									}
-								}
-								IOUtils.write("]}", output);
-							} catch (SQLException | ClassNotFoundException | NamingException e) {
-								throw WebExceptionBuilder.buildInternalServerError(e);
-							} finally {
-								if (db != null) {
-									try {
-										db.close();
-									} catch (SQLException e) {
-										e.printStackTrace();
-									}
-								}
-							}
-						}
-					};
-				}
+				};
 			}
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException | UnsupportedOperationException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
@@ -380,6 +410,6 @@ public class StreamResource {
 				}
 			}
 		}
-		return new ResponseMsg("Succefully deleted stream (" + streamName + ") as requested.");
+		return new ResponseMsg("Succefully deleted stream (" + streamName + ").");
 	}	
 }

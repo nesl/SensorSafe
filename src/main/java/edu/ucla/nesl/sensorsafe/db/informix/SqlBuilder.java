@@ -9,6 +9,8 @@ import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
 
+import edu.ucla.nesl.sensorsafe.tools.Log;
+
 public class SqlBuilder {
 	public String virtualTableName;
 	public String streamTableName;
@@ -116,14 +118,21 @@ public class SqlBuilder {
 		this.condTimeRange = null;
 	}
 
-	public String buildSqlStatementInsertPrefix(String table) {
-		offset = 0;
-		limit = 0;
-		return "INSERT INTO " + table + " " + buildSqlStatement();
-	}
-
 	public void removeConditions() {
 		condRules = null;
 		condFilter = null;
+	}
+
+	public PreparedStatement getPreparedStatementInsertPrefix(Connection conn,	String table) throws SQLException {
+		int tempOffset = offset;
+		offset = 0;
+		int tempLimit = limit;
+		limit = 0;
+		String sql = "INSERT INTO " + table + " " + buildSqlStatement();
+		Log.info(sql);
+		PreparedStatement pstmt = getPreparedStatement(conn, sql);
+		offset = tempOffset;
+		limit = tempLimit;
+		return pstmt;
 	}
 }

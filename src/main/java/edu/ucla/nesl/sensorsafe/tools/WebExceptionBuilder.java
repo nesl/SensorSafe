@@ -38,8 +38,14 @@ public class WebExceptionBuilder {
 		return new WebApplicationException(Response.status(Response.Status.INTERNAL_SERVER_ERROR).type(MediaType.TEXT_PLAIN).entity(MSG_DATABASE_NOT_READY).build());
 	}*/
 
-	public static WebApplicationException buildNotImplemented() {
-		return new WebApplicationException(Response.status(Response.Status.NOT_IMPLEMENTED).build());
+	public static WebApplicationException buildNotImplemented() throws JsonProcessingException {
+		return new WebApplicationException(
+				Response
+					.status(Response.Status.NOT_IMPLEMENTED)
+					.type(MediaType.APPLICATION_JSON)
+					.entity(new ResponseMsg(Response.Status.NOT_IMPLEMENTED.getReasonPhrase()).encodeJson())
+					.build()
+				);
 	}
 	
 	//public static WebApplicationException buildBadRequest() {
@@ -57,12 +63,6 @@ public class WebExceptionBuilder {
 	}
 
 	public static WebApplicationException buildBadRequest(Exception e) throws JsonProcessingException {
-		return new WebApplicationException(
-				Response
-					.status(Response.Status.BAD_REQUEST)
-					.type(MediaType.APPLICATION_JSON)
-					.entity(new ResponseMsg(e.getMessage()).encodeJson())
-					.build()
-				);
+		return buildBadRequest(e.getMessage());
 	}
 }

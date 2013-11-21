@@ -139,9 +139,10 @@ public class StreamResource {
 	public ResponseMsg doPostNewStream(@Valid Stream stream) throws JsonProcessingException {
 		StreamDatabaseDriver db = null;
 		String ownerName = securityContext.getUserPrincipal().getName();
+		stream.setOwner(ownerName);
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			db.createStream(ownerName, stream);
+			db.createStream(stream);
 		} catch (IOException | NamingException | SQLException | ClassNotFoundException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
@@ -327,7 +328,7 @@ public class StreamResource {
 						}
 					}
 				} else {
-					strJson = getStreamJsonPrefix(db.getStreamInfo(streamOwner, streamName));
+					strJson = getStreamJsonPrefix(db.getStream(streamOwner, streamName));
 				}
 				return strJson + "]}";
 			} else {
@@ -351,7 +352,7 @@ public class StreamResource {
 									}
 								}
 							} else {
-								strJson = getStreamJsonPrefix(db.getStreamInfo(streamOwner, streamName));
+								strJson = getStreamJsonPrefix(db.getStream(streamOwner, streamName));
 							}
 							IOUtils.write("]}", output);
 						} catch (SQLException | ClassNotFoundException | NamingException | UnsupportedOperationException e) {

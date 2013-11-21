@@ -16,47 +16,25 @@ import edu.ucla.nesl.sensorsafe.model.TemplateParameterDefinition;
 
 public interface StreamDatabaseDriver extends DatabaseDriver {
 	
-	public List<Rule> getRules(String owner) 
-			throws SQLException;
+	public List<Rule> getRules(String owner) throws SQLException;
 	
-	public void addUpdateRuleTemplate(String owner, Rule rule) 
-			throws SQLException;
+	public void addUpdateRuleTemplate(String owner, Rule rule) throws SQLException;
 	
-	public void deleteAllRules(String owner) 
-			throws SQLException;
+	public void deleteAllRules(String owner) throws SQLException;
 	
-	public void createStream(String owner, Stream stream) 
-			throws SQLException, ClassNotFoundException;
+	public void createStream(Stream stream) throws SQLException, ClassNotFoundException;
 	
-	public void addTuple(String owner, String streamName, String strTuple) 
-			throws SQLException;
+	public void addTuple(String owner, String streamName, String strTuple) throws SQLException;
 	
-	/*
-	 * Returns false if no data are allowed.
-	 */
-	public boolean prepareQuery(
-			String requestingUser, 
-			String streamOwner, 
-			String streamName, 
-			String startTime, 
-			String endTime,
-			String aggregator,
-			String filter, 
-			int limit, 
-			int offset) 
-			throws SQLException, JsonProcessingException;
+	public boolean prepareQuery(String requestingUser,	 String streamOwner, String streamName, String startTime, String endTime, String aggregator, String filter, int limit, int offset) throws SQLException, JsonProcessingException, ClassNotFoundException;
 	
-	public Stream getStreamInfo(String owner, String name) 
-			throws SQLException;
+	public Stream getStream(String owner, String name) 	throws SQLException;
 	
-	public List<Stream> getStreamList(String owner) 
-			throws SQLException;
+	public List<Stream> getStreamList(String owner) throws SQLException;
 
-	public void deleteStream(String owner, String streamName, String startTime, String endTime)
-			throws SQLException;
+	public void deleteStream(String owner, String streamName, String startTime, String endTime) throws SQLException;
 	
-	public void deleteAllStreams(String owner) 
-			throws SQLException;
+	public void deleteAllStreams(String owner) throws SQLException;
 
 	public void clean() throws SQLException, ClassNotFoundException;
 
@@ -65,10 +43,6 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException, NoSuchAlgorithmException;
 
 	public JSONArray getNextJsonTuple() throws SQLException;
-
-	public void queryStreamTest(String requestingUser, String streamOwner, String streamName,
-			String startTime, String endTime, String filter, int limit,
-			int offset) throws SQLException;
 
 	public void addOrUpdateMacro(String owner, Macro macro) throws SQLException;
 
@@ -84,8 +58,7 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 
 	public List<Rule> getTemplates(String ownerName) throws SQLException;
 
-	public void createRuleFromTemplate(String ownerName,
-			TemplateParameterDefinition params) throws SQLException;
+	public void createRuleFromTemplate(String ownerName, TemplateParameterDefinition params) throws SQLException;
 
 	public Stream getQueryResultStreamInfo();
 }

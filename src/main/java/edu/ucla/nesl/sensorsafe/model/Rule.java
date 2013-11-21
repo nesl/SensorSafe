@@ -7,13 +7,19 @@ import javax.validation.constraints.NotNull;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 
+import org.apache.commons.lang.StringUtils;
+
 import com.wordnik.swagger.annotations.ApiModel;
 import com.wordnik.swagger.annotations.ApiModelProperty;
+
+import edu.ucla.nesl.sensorsafe.db.informix.Aggregator;
 
 @ApiModel(value = "Rule")
 @XmlRootElement(name = "rule")
 public class Rule {
-	
+
+	private static final String[] VALID_RULE_ACTIONS = { "allow", "deny" }; 
+
 	@XmlElement(name = "id")
 	public int id;
 	
@@ -63,5 +69,41 @@ public class Rule {
 	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action, int priority, String templateName) {
 		this(id, targetUsers, targetStreams, condition, action, priority);
 		this.template_name = templateName;
+	}
+
+	public boolean isValidRule() {
+		boolean isAggregator = false;
+
+		// Check action field
+		if (action == null) {
+			throw new IllegalArgumentException("Rule action field cannot be null.");
+		}
+
+		boolean isValid = false;
+		for (String validAction: VALID_RULE_ACTIONS) {
+			if (action.equalsIgnoreCase(validAction)) {
+				isValid = true;
+			}
+		}
+		if (!isValid) {
+			// Check if this is valid aggregate rule.
+			if (Aggregator.isAggregateExpression(action)) {
+				isAggregator = true;
+				if (condition != null) {
+					throw new IllegalArgumentException("Aggregate rules with filtering condition is not supported.");
+				}
+				if (priority != Integer.MAX_VALUE) {
+					throw new IllegalArgumentException("Priority for aggregate rule should not be specified.");
+				}
+			} else {
+				throw new IllegalArgumentException("Invalid rule action. Valid actions are: " + StringUtils.join(VALID_RULE_ACTIONS, ", "));
+			}
+		}
+		isValid = false;
+		if (priority < 1) {
+			throw new IllegalArgumentException("priority must be greater than or equal to 1.");
+		}
+
+		return isAggregator;
 	}
 }

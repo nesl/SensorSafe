@@ -20,6 +20,7 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.SecurityContext;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiParam;
@@ -52,7 +53,7 @@ public class ConsumerResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-	public List<User> getConsumerList() {
+	public List<User> getConsumerList() throws JsonProcessingException {
 		String ownerName = securityContext.getUserPrincipal().getName();
 		UserDatabaseDriver db = null;
 		List<User> users = null;
@@ -104,7 +105,7 @@ public class ConsumerResource {
 								+ "the server will send an email with "
 								+ "Apikey, OAuth Consumer Key, and Secret."
 						, required = true)
-			User newConsumer) {
+			User newConsumer) throws JsonProcessingException {
 		String ownerName = securityContext.getUserPrincipal().getName();
 		UserDatabaseDriver db = null;
 		try {
@@ -145,7 +146,7 @@ public class ConsumerResource {
     })
 	public ResponseMsg deleteConsumer(
 			@ApiParam(name = "username", value = "Enter a username you want to delete.", required = true)
-			@QueryParam("username") String consumerName) {
+			@QueryParam("username") String consumerName) throws JsonProcessingException {
 		
 		String ownerName = securityContext.getUserPrincipal().getName();
 		UserDatabaseDriver db = null;

@@ -101,7 +101,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			Statement stmt = null;
 			try {
 				stmt = conn.createStatement();
-				stmt.execute("DROP ROW TYPE IF EXISTS " + storedTempRowTypeName + " RESTRICT;");				
+				String sql = "DROP ROW TYPE IF EXISTS " + storedTempRowTypeName + " RESTRICT;";
+				Log.info(sql);
+				stmt.execute(sql);				
 			} finally {
 				if (stmt != null) {
 					stmt.close();
@@ -117,7 +119,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			for (String table : storedTempTables) {
 				try {
 					stmt = conn.createStatement();
-					stmt.execute("DROP TABLE IF EXISTS " + table);				
+					String sql = "DROP TABLE IF EXISTS " + table;
+					Log.info(sql);
+					stmt.execute(sql);				
 				} finally {
 					if (stmt != null) {
 						stmt.close();
@@ -133,7 +137,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			Statement stmt = null;
 			try {
 				stmt = conn.createStatement();
-				stmt.execute("DROP VIEW IF EXISTS " + storedTempViewName);				
+				String sql = "DROP VIEW IF EXISTS " + storedTempViewName;
+				Log.info(sql);
+				stmt.execute(sql);				
 			} finally {
 				if (stmt != null) {
 					stmt.close();
@@ -621,7 +627,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		//int id = getNewStreamId();
 
 		// Create row type if not exists.
-		executeSqlCreateRowType(stream.channels);
+		createRowType(stream.channels);
 
 		// Add the type map information
 		Map<String, Class<?>> typeMap = conn.getTypeMap();
@@ -688,7 +694,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}*/
 
-	private void executeSqlCreateRowType(List<Channel> channels) throws SQLException {
+	private void createRowType(List<Channel> channels) throws SQLException {
 		Statement stmt = null;
 		try {
 			stmt = conn.createStatement();
@@ -696,7 +702,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			String rowTypeName = getRowTypeName(channels);
 			String channelSqlPart = "";
 
-			int channelID = 1;
+			int channelID = 1;			
 			for (Channel channel: channels) {
 				if (channel.type.equals("text")) {
 					channelSqlPart += "channel" + channelID + " VARCHAR(255), ";
@@ -705,11 +711,15 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				}
 				channelID += 1;
 			}
+			
 			channelSqlPart = channelSqlPart.substring(0, channelSqlPart.length() - 2);
+			
 			String sql = "CREATE ROW TYPE IF NOT EXISTS " + rowTypeName + "("
 					+ "timestamp DATETIME YEAR TO FRACTION(5), "
 					+ channelSqlPart + ")";
-
+			
+			Log.info(sql);
+			
 			stmt.execute(sql);
 		} finally {
 			if (stmt != null) 
@@ -840,7 +850,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 	private void executeSqlInsertIntoTimeseries(int id, String strTuple, String prefix) throws SQLException {
 
-		TimestampValues param = parseAddTupleRequestBody(strTuple, prefix);
+		TimestampValues param = parseStrTuple(strTuple, prefix);
 		String format[] = prefix.split("_");
 
 		if (format.length != param.values.size()) {
@@ -889,7 +899,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 
-	private TimestampValues parseAddTupleRequestBody(String strTuple, String prefix) {
+	private TimestampValues parseStrTuple(String strTuple, String prefix) {
 		Object objTuple = JSONValue.parse(strTuple);
 		List<Object> values = new ArrayList<Object>();
 		Timestamp timestamp = null;
@@ -1095,7 +1105,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		Stream stream = getStreamInfo(streamOwner, streamName);
 
 		// Build SQL
-		SqlBuilder sql = new SqlBuilder(stream.id, offset, limit, getVirtualTableName(stream.channels), getStreamTableName(stream.channels), startTs, endTs, filter);
+		SqlBuilder sql = new SqlBuilder(stream.id, offset, limit, getVirtualTableName(stream.channels), getStreamTableName(stream.channels), startTs, endTs, filter, stream);
 
 		// Apply rule condition.
 		if (!streamOwner.equals(requestingUser)) {
@@ -1121,9 +1131,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				String tempCondFilter = sql.condFilter;
 				sql.condFilter = null;
 				
-				sql = processConditionOnOtherStreams(sql, streamOwner, stream);
+				sql = processConditionOnOtherStreams(sql, streamOwner);
 				
-				sql = processAggregateQueryWithFilter(agg, aggregator, sql, stream);
+				sql = processAggregateQueryWithFilter(agg, aggregator, sql);
 				
 				sql.condFilter = tempCondFilter;
 				sql.condRules = null;
@@ -1136,7 +1146,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			sql = convertChannelNames(stream.channels, sql);
 		}
 		
-		sql = processConditionOnOtherStreams(sql, streamOwner, stream);
+		sql = processConditionOnOtherStreams(sql, streamOwner);
 
 		if (aggregator == null) {
 			executeQuery(sql, stream);
@@ -1144,11 +1154,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			if (sql.condFilter == null && sql.condRules == null) {
 				// If aggregator with no filter, no rules, we can skip creating temporary filtered result.
 				Aggregator agg = new Aggregator(aggregator);
-				sql = processAggregateQueryNoFilter(agg, aggregator, sql, stream);
+				sql = processAggregateQueryNoFilter(agg, aggregator, sql);
 				executeQuery(sql, stream);
 			} else {
 				Aggregator agg = new Aggregator(aggregator);		
-				sql = processAggregateQueryWithFilter(agg, aggregator, sql, stream);
+				sql = processAggregateQueryWithFilter(agg, aggregator, sql);
 				executeQuery(sql, stream);
 			}
 		}
@@ -1210,64 +1220,52 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 
-	private SqlBuilder processAggregateQueryNoFilter(Aggregator agg, String aggregator, SqlBuilder sql, Stream stream) throws SQLException {
+	private SqlBuilder processAggregateQueryNoFilter(Aggregator agg, String aggregator, SqlBuilder sql) throws SQLException {
 
-		//Get row type for this stream
-		String rowtype = getRowTypeName(stream.channels);
-
+		String aggExpr = convertAggreagteExprChannelNames(sql.stream.channels, agg.arguments.get(0));
+		
+		// Find out row type for aggregate expression.
+		List<Channel> aggChannels = getAggregateChannel(sql.stream.channels, aggExpr, agg.arguments.get(0));
+		
+		// Create row type if not exists.
+		String aggRowType = getRowTypeName(aggChannels);
+		createRowType(aggChannels);
+		
 		// Get temporary UUID
 		String tempName = newUUIDString();
 		String tempTable = "streams_" + tempName;
 		String tempVTable = "vtable_" + tempName;
 
 		// Create temporary tables
-		createTempStreamTable(tempTable, rowtype);		
+		createTempStreamTable(tempTable, aggRowType);		
 		createTempVirtualTable(tempVTable, tempTable);
 
+		String aggregateSql = null;
+		
 		if (agg.type.equals(Aggregator.Type.AGGREGATE_BY)) {
 			// Check calendar and get valid calendar name
-			String calendar = determineCalendar(agg.arguments[1]);
-			String aggExpr = convertAggreagteExprChannelNames(stream.channels, agg.arguments[0]);
+			String calendar = determineCalendar(agg.arguments.get(1));
 
 			// Generate AggregateBy SQL
-			String aggregateBySql = "INSERT INTO " + tempTable 
-					+ " SELECT " + stream.id 
+			aggregateSql = "INSERT INTO " + tempTable 
+					+ " SELECT " + sql.stream.id 
 					+ ", AggregateBy("
 					+ "'" + aggExpr + "',"
 					+ "'" + calendar + "',"
 					+ "tuples,0";
 
 			if (sql.startTime != null && sql.endTime != null) {
-				aggregateBySql += ",'" + sql.startTime.toString() + "'::DATETIME YEAR TO FRACTION(5),"
+				aggregateSql += ",'" + sql.startTime.toString() + "'::DATETIME YEAR TO FRACTION(5),"
 						+ "'" + sql.endTime.toString() + "'::DATETIME YEAR TO FRACTION(5)";
 			}
 
-			aggregateBySql += ")::TimeSeries(" + rowtype + ") "
-					+ "FROM " + sql.streamTableName + " WHERE id = " + stream.id + ";";
+			aggregateSql += ")::TimeSeries(" + aggRowType + ") "
+					+ "FROM " + sql.streamTableName + " WHERE id = " + sql.stream.id + ";";
 
-			Log.info(aggregateBySql);
-
-			// Execute AggregateBy
-			PreparedStatement pstmt = null;
-			try {
-				pstmt = conn.prepareStatement(aggregateBySql);
-				pstmt.executeUpdate();
-			} finally {
-				if (pstmt != null) {
-					pstmt.close();
-				}
-			}
-
-			// Modify original sql to refer to the temporary virtual table
-			sql.virtualTableName = tempVTable;
-			sql.streamTableName = tempTable;
-			sql.removeTimeRange();
-
-			return sql;
 		} else if (agg.type.equals(Aggregator.Type.AGGREGATE_RANGE)) {
 
 			// Create an empty time seris for aggregate result.
-			String insertSql = "INSERT INTO " + tempTable + " VALUES ( " + stream.id 
+			String insertSql = "INSERT INTO " + tempTable + " VALUES ( " + sql.stream.id 
 					+ ",'origin(" + ORIGIN_TIMESTAMP + "),calendar(sec_cal),threshold(0),irregular,[]');";
 
 			Log.info(insertSql);
@@ -1282,51 +1280,84 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				}
 			}
 
-			String aggExpr = convertAggreagteExprChannelNames(stream.channels, agg.arguments[0]);
-
-			String updateSql = 
-					"UPDATE " + tempTable + " SET tuples = "
+			aggregateSql = "UPDATE " + tempTable + " SET tuples = "
 							+ "PutElem(tuples,("
 							+ "SELECT AggregateRange('" + aggExpr + "',tuples,0";
 
 			if (sql.startTime != null && sql.endTime != null) {
-				updateSql += ",'" + sql.startTime.toString() + "'::DATETIME YEAR TO FRACTION(5),'"
+				aggregateSql += ",'" + sql.startTime.toString() + "'::DATETIME YEAR TO FRACTION(5),'"
 						+ sql.endTime.toString() + "'::DATETIME YEAR TO FRACTION(5)";
 			}
-			updateSql += ")::" + rowtype 
-					+ " FROM " + sql.streamTableName + " WHERE id = " + stream.id + "))"
-					+ " WHERE id = " + stream.id + ";";
+			
+			aggregateSql += ")::" + aggRowType 
+					+ " FROM " + sql.streamTableName + " WHERE id = " + sql.stream.id + "))"
+					+ " WHERE id = " + sql.stream.id + ";";
 
-			Log.info(updateSql);
-
-			pstmt = null;
-			try {
-				pstmt = conn.prepareStatement(updateSql);
-				pstmt.executeUpdate();
-			} finally {
-				if (pstmt != null) { 
-					pstmt.close();
-				}
-			}
-
-			// Modify original sql to refer to the temporary virtual table
-			sql.virtualTableName = tempVTable;
-			sql.streamTableName = tempTable;
-			sql.removeTimeRange();
-
-			return sql;
 		} else {
 			throw new UnsupportedOperationException("Not supported yet.");
 		}
+		
+		Log.info(aggregateSql);
+		
+		// Execute AggregateBy
+		PreparedStatement pstmt = null;
+		try {
+			pstmt = conn.prepareStatement(aggregateSql);
+			pstmt.executeUpdate();
+		} catch (SQLException e) {
+			String msg = e.getMessage();
+			if (msg.contains("aggregation is not allowed on columns of type")) {
+				throw new IllegalArgumentException(e.getMessage());
+			} else if (msg.contains("Invalid aggregation operator")) {
+				throw new IllegalArgumentException(e.getMessage());
+			} else {
+				throw e;
+			}
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		} 
+
+		// Modify original sql to refer to the temporary virtual table
+		sql.virtualTableName = tempVTable;
+		sql.streamTableName = tempTable;	
+		sql.stream.channels = aggChannels;
+		sql.removeTimeRange();
+
+		return sql;
 	}
 
-	private SqlBuilder processAggregateQueryWithFilter(Aggregator agg, String aggregator, SqlBuilder sql, Stream stream) throws SQLException {
+	private List<Channel> getAggregateChannel(List<Channel> channels, String aggExpr, String oriAggExpr) {
+		String[] aggExprChannels = oriAggExpr.split(",");
+		List<Channel> aggChannels = new ArrayList<Channel>();
+		Pattern columnPattern = Pattern.compile("\\$channel[0-9]+");
+		Pattern integerPattern = Pattern.compile("[0-9]+");
+		Matcher columnMatcher = columnPattern.matcher(aggExpr);
+		int i = 0;
+		while (columnMatcher.find()) {
+			String column = columnMatcher.group();
+			Matcher integerMatcher = integerPattern.matcher(column);
+			while (integerMatcher.find()) {
+				int channelNum = Integer.valueOf(integerMatcher.group());
+				aggChannels.add(new Channel(aggExprChannels[i++], channels.get(channelNum-1).type));
+			}
+		}
+		
+		if (aggChannels.size() <= 0) {
+			throw new IllegalArgumentException("Invalid aggregate expression.");
+		}
+		
+		return aggChannels;
+	}
+
+	private SqlBuilder processAggregateQueryWithFilter(Aggregator agg, String aggregator, SqlBuilder sql) throws SQLException {
 
 		// Limit the duration.
 		//checkStartEndTimeDuration(sql);
 
 		//Get row type for this stream
-		String rowtype = getRowTypeName(stream.channels);
+		String rowtype = getRowTypeName(sql.stream.channels);
 
 		// Get temporary UUID
 		String tempName = newUUIDString();
@@ -1338,7 +1369,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		createTempVirtualTable(tempVTable, tempTable);
 
 		// Create new empty timeseries
-		String newTsSql = "INSERT INTO " + tempTable + " VALUES ( " + stream.id 
+		String newTsSql = "INSERT INTO " + tempTable + " VALUES ( " + sql.stream.id 
 				+ ",'origin(" + ORIGIN_TIMESTAMP + "),calendar(sec_cal),threshold(0),irregular,[]');";
 
 		Log.info(newTsSql);
@@ -1372,7 +1403,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		sql.removeConditions();
 
 		// Process aggregate function on the new time series.
-		sql = processAggregateQueryNoFilter(agg, aggregator, sql, stream);
+		sql = processAggregateQueryNoFilter(agg, aggregator, sql);
 
 		return sql;
 	}
@@ -1468,7 +1499,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return dt;
 	}
 
-	private SqlBuilder processConditionOnOtherStreams(SqlBuilder sql, String streamOwner, Stream stream) throws SQLException {
+	private SqlBuilder processConditionOnOtherStreams(SqlBuilder sql, String streamOwner) throws SQLException {
 
 		// Check if the sql contains expression: STREAM_NAME.CHANNEL_NAME
 		Pattern cronExprPattern = Pattern.compile("\\s[a-zA-Z]+[a-zA-Z0-9_]*\\.[a-zA-Z]+[a-zA-Z0-9_]*\\s");
@@ -1507,7 +1538,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		// Get merged channels and conversion table.
 		Map<String, String> conversion = new HashMap<String, String>();
 		List<Channel> mergedChannel = new ArrayList<Channel>();
-		int idx = stream.channels.size() + 1;
+		int idx = sql.stream.channels.size() + 1;
 		for (Stream otherStream: otherStreamMap.keySet()) {
 			for (Channel channel: otherStream.channels) {
 				mergedChannel.add(channel);
@@ -1520,7 +1551,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		String createRowtype = "CREATE ROW TYPE " + tempRowType + " ("
 				+ "timestamp DATETIME YEAR TO FRACTION(5), ";
 		idx = 1;
-		for (Channel channel: stream.channels){
+		for (Channel channel: sql.stream.channels){
 			if (channel.type.equals("float")) {
 				createRowtype += "channel" + idx + " FLOAT, ";
 			} else if (channel.type.equals("int")) {
@@ -1565,20 +1596,20 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		createTempVirtualTable(tempVTable, tempTable);
 
 		// Generate Union() sql
-		String executeUnion = "INSERT INTO " + tempTable + " SELECT " + stream.id + ", Union('" + sql.startTime.toString() + "'::DATETIME YEAR TO FRACTION(5), '" + sql.endTime.toString() + "'::DATETIME YEAR TO FRACTION(5), t1.tuples, ";
+		String executeUnion = "INSERT INTO " + tempTable + " SELECT " + sql.stream.id + ", Union('" + sql.startTime.toString() + "'::DATETIME YEAR TO FRACTION(5), '" + sql.endTime.toString() + "'::DATETIME YEAR TO FRACTION(5), t1.tuples, ";
 
 		for (idx = 2; idx <= otherStreamMap.keySet().size() + 1; idx++) {
 			executeUnion += "t" + idx + ".tuples, ";
 		}
 		executeUnion = executeUnion.substring(0, executeUnion.length() - 2) + ")::TimeSeries(" + tempRowType + ") FROM ";
-		executeUnion += getStreamTableName(stream.channels) + " t1, "; 
+		executeUnion += getStreamTableName(sql.stream.channels) + " t1, "; 
 		idx = 2;
 		for (Stream otherStream: otherStreamMap.keySet()) {
 			executeUnion += getStreamTableName(otherStream.channels) + " t" + idx + ", ";
 			idx++;
 		}
 		executeUnion = executeUnion.substring(0, executeUnion.length() - 2) + " WHERE ";
-		executeUnion += "t1.id = " + stream.id + " AND ";
+		executeUnion += "t1.id = " + sql.stream.id + " AND ";
 		idx = 2;
 		for (Stream otherStream: otherStreamMap.keySet()) {
 			executeUnion += "t" + idx + ".id = " + otherStream.id + " AND ";
@@ -2484,5 +2515,10 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			expr = expr.replace("$(" + param.name + ")", param.value);
 		}
 		return expr;
+	}
+
+	@Override
+	public Stream getQueryResultStreamInfo() {
+		return storedStream;
 	}
 }

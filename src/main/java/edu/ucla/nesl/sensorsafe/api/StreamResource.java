@@ -31,6 +31,7 @@ import net.minidev.json.JSONValue;
 
 import org.apache.commons.io.IOUtils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.AnnotationIntrospector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.jaxb.JaxbAnnotationIntrospector;
@@ -56,7 +57,8 @@ public class StreamResource {
 	private static final int ROW_LIMIT_WITHOUT_HTTP_STREAMING = 100;
 	
 	private static final String GET_STREAM_NOTES =
-			"filter<BR>"
+			"<BR>"
+			+ "<b>filter</b><BR>"
 			+ "<BR>"
 			+ "- You can use any valid SQL expression with variable name 'timestamp' and channel names defined for the stream.<BR>"
 			+ "&emsp;  Examples:<BR>"
@@ -74,6 +76,10 @@ public class StreamResource {
 			+ "<BR>"
 			+ "<BR>"
 			+ "aggregator<BR>"
+			+ "<BR>"
+			+ "Examples:<BR>"
+			+ "&emsp;  AggregateBy( \"avg($channel1), avg($channel2), avg($channel3)\", \"1week\")<BR>"
+			+ "&emsp;  AggregateRange( \"max($value), min($value)\" )<BR>"
 			+ "<BR>"
 			+ "- AggregateBy(expression, calendar)<BR>"
 			+ "&emsp;  Down sample time series to the calendar, e.g., every 1 seconds to every 1 hour.<BR>"
@@ -98,7 +104,7 @@ public class StreamResource {
 	})
 	public List<Stream> doGetAllStreams(
 			@ApiParam(name = "stream_owner", value = "If null, get currently authenticated user's streams.")
-			@QueryParam("stream_owner") String streamOwner) {
+			@QueryParam("stream_owner") String streamOwner) throws JsonProcessingException {
 
 		if (streamOwner == null) {
 			streamOwner = securityContext.getUserPrincipal().getName();
@@ -130,7 +136,7 @@ public class StreamResource {
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public ResponseMsg doPostNewStream(@Valid Stream stream) {
+	public ResponseMsg doPostNewStream(@Valid Stream stream) throws JsonProcessingException {
 		StreamDatabaseDriver db = null;
 		String ownerName = securityContext.getUserPrincipal().getName();
 		try {
@@ -158,7 +164,7 @@ public class StreamResource {
 	@ApiResponses(value = {
 			@ApiResponse(code = 500, message = "Internal Server Error")
 	})
-	public ResponseMsg doDeleteAllStreams() {
+	public ResponseMsg doDeleteAllStreams() throws JsonProcessingException {
 		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
 		try {
@@ -199,7 +205,7 @@ public class StreamResource {
 					+ "2013-01-01 09:20:13.12345, 11.4, 3.2, 1.5\n"
 					+ "2013-01-01 09:20:14.12345, 10.4, 4.2, 7.5\n"
 					+ "</pre>")
-	String data) {
+	String data) throws JsonProcessingException {
 
 		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
@@ -249,7 +255,7 @@ public class StreamResource {
 					+ "          \"tuple\": [ 12.4, 1.2, 5.5 ] }\n"
 					+ "\n"
 					+ "If timestamp is null, current server time will be used.</pre>") 
-			String strTuple) {
+			String strTuple) throws JsonProcessingException {
 
 		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
@@ -297,7 +303,7 @@ public class StreamResource {
 			@QueryParam("offset") 						final int offset,
 			@ApiParam(name = "http_streaming", value = "Default value is true.") 
 			@DefaultValue("true") @QueryParam("http_streaming") final boolean isHttpStreaming
-			) {
+			) throws JsonProcessingException {
 
 		StreamDatabaseDriver db = null;
 		final String requestingUser = securityContext.getUserPrincipal().getName();		
@@ -307,17 +313,12 @@ public class StreamResource {
 			if (!isHttpStreaming && limit > ROW_LIMIT_WITHOUT_HTTP_STREAMING) {
 				throw WebExceptionBuilder.buildBadRequest("Too mcuh data requested without HTTP streaming.");
 			}
-			Stream stream = db.getStreamInfo(streamOwner, streamName);
-			ObjectMapper mapper = new ObjectMapper();
-			AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
-			mapper.setAnnotationIntrospector(introspector);
-			JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
-			String strJson = json.toString();
-			strJson = strJson.substring(0, strJson.length() - 1) + ",\"tuples\":[";
-
+			
 			if (!isHttpStreaming) {
 				boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset);
+				String strJson = "";
 				if (isData) {
+					strJson = getStreamJsonPrefix(db.getQueryResultStreamInfo());
 					JSONArray tuple = db.getNextJsonTuple();
 					if (tuple != null) {
 						strJson += tuple.toString();
@@ -325,10 +326,11 @@ public class StreamResource {
 							strJson += "," + tuple.toString();
 						}
 					}
+				} else {
+					strJson = getStreamJsonPrefix(db.getStreamInfo(streamOwner, streamName));
 				}
 				return strJson + "]}";
 			} else {
-				final String strJsonOutput = strJson;
 				return new StreamingOutput() {
 					@Override
 					public void write(OutputStream output) throws IOException, WebApplicationException {
@@ -336,8 +338,10 @@ public class StreamResource {
 						try {
 							db = DatabaseConnector.getStreamDatabase();
 							boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset);
-							IOUtils.write(strJsonOutput, output);
+							String strJson = "";
 							if (isData) {
+								strJson = getStreamJsonPrefix(db.getQueryResultStreamInfo());
+								IOUtils.write(strJson, output);
 								JSONArray tuple;
 								tuple = db.getNextJsonTuple();
 								if (tuple != null) {
@@ -346,6 +350,8 @@ public class StreamResource {
 										IOUtils.write("," + tuple.toString(), output);
 									}
 								}
+							} else {
+								strJson = getStreamJsonPrefix(db.getStreamInfo(streamOwner, streamName));
 							}
 							IOUtils.write("]}", output);
 						} catch (SQLException | ClassNotFoundException | NamingException | UnsupportedOperationException e) {
@@ -380,6 +386,15 @@ public class StreamResource {
 	}	
 
 
+	private String getStreamJsonPrefix(Stream stream) throws JsonProcessingException {
+		ObjectMapper mapper = new ObjectMapper();
+		AnnotationIntrospector introspector = new JaxbAnnotationIntrospector();
+		mapper.setAnnotationIntrospector(introspector);
+		JSONObject json = (JSONObject)JSONValue.parse(mapper.writeValueAsString(stream));
+		String strJson = json.toString();
+		return strJson.substring(0, strJson.length() - 1) + ",\"tuples\":[";
+	}
+
 	@RolesAllowed(Roles.OWNER)
 	@DELETE
 	@Path("/{stream_name}")
@@ -390,7 +405,7 @@ public class StreamResource {
 	public ResponseMsg doDeleteStream(
 			@PathParam("stream_name") 	String streamName,
 			@QueryParam("start_time") 	String startTime, 
-			@QueryParam("end_time") 	String endTime) {
+			@QueryParam("end_time") 	String endTime) throws JsonProcessingException {
 
 		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;

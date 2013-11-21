@@ -15,6 +15,8 @@ import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.ext.Provider;
 import javax.xml.bind.DatatypeConverter;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
 import edu.ucla.nesl.sensorsafe.db.UserDatabaseDriver;
 import edu.ucla.nesl.sensorsafe.model.User;
@@ -64,7 +66,7 @@ public class AuthenticationFilter implements ContainerRequestFilter {
 		return new String(decodedBytes).split(":", 2);
 	}
 
-	private void performHttpBasicAuthentication(ContainerRequestContext request, String basicAuthHeader) {
+	private void performHttpBasicAuthentication(ContainerRequestContext request, String basicAuthHeader) throws JsonProcessingException {
 
 		//lap : loginAndPassword
 		String[] lap = decodeBasicAuth(basicAuthHeader);

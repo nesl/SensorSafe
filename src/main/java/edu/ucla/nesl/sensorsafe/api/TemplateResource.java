@@ -18,6 +18,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.SecurityContext;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiParam;
@@ -46,7 +47,7 @@ public class TemplateResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-	public List<Rule> doGet() {
+	public List<Rule> doGet() throws JsonProcessingException {
 		String ownerName = securityContext.getUserPrincipal().getName();
 		List<Rule> rules;
     	StreamDatabaseDriver db = null;
@@ -77,7 +78,7 @@ public class TemplateResource {
     public ResponseMsg doPost(
     		@ApiParam(name = "rule", value = "condition field can contain parameter variables, e.g., $(PARAM_VAR), "
     				+ "and will be replaced by template definition with /api/template/create_rule API.")
-    		@Valid Rule rule) {
+    		@Valid Rule rule) throws JsonProcessingException {
     	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {
@@ -107,7 +108,7 @@ public class TemplateResource {
     })
     public ResponseMsg doDelete(
     		@QueryParam("id") int id,
-    		@QueryParam("template_name") String templateName) {
+    		@QueryParam("template_name") String templateName) throws JsonProcessingException {
     	
     	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
@@ -137,7 +138,7 @@ public class TemplateResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-    public ResponseMsg createTemplateRule(@Valid TemplateParameterDefinition params) {
+    public ResponseMsg createTemplateRule(@Valid TemplateParameterDefinition params) throws JsonProcessingException {
     	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {

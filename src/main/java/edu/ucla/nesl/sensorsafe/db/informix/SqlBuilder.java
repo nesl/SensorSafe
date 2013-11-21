@@ -9,6 +9,7 @@ import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
 
+import edu.ucla.nesl.sensorsafe.model.Stream;
 import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class SqlBuilder {
@@ -25,7 +26,9 @@ public class SqlBuilder {
 	public Timestamp startTime;
 	public Timestamp endTime;
 	
-	public SqlBuilder(int streamID, int offset, int limit, String virtualTableName, String streamTableName, Timestamp startTime, Timestamp endTime, String filter) {
+	public Stream stream;
+	
+	public SqlBuilder(int streamID, int offset, int limit, String virtualTableName, String streamTableName, Timestamp startTime, Timestamp endTime, String filter, Stream stream) {
 		this.streamID = streamID;
 		this.offset = offset;
 		this.limit = limit;
@@ -43,6 +46,8 @@ public class SqlBuilder {
 			condTimeRange = "timestamp >= ?";				
 		}
 		condFilter = filter;
+		
+		this.stream = stream;
 	}
 
 	private String joinString(String[] strs, String separator) {

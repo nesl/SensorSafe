@@ -11,6 +11,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiParam;
@@ -66,7 +67,7 @@ public class AdminResource {
     })
 	public ResponseMsg changeAdminPassword(
 			@ApiParam(name = "password", value = "Enter your new password here.", required = true) 
-			String password) {
+			String password) throws JsonProcessingException {
 		UserDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getUserDatabase();

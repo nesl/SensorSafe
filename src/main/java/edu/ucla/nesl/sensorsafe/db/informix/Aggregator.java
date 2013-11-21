@@ -1,8 +1,12 @@
 package edu.ucla.nesl.sensorsafe.db.informix;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class Aggregator {
 	public static enum Type { AGGREGATE_BY, AGGREGATE_RANGE };
@@ -14,7 +18,7 @@ public class Aggregator {
 	}
 
 	public Type type;
-	public String[] arguments;
+	public List<String> arguments;
 
 	public Aggregator(String expr) {
 		expr = expr.trim();
@@ -38,15 +42,31 @@ public class Aggregator {
 		}
 		
 		// Get arguments.
-		arguments = expr.split(",");
-				
-		for (int i = 0; i < arguments.length; i++) {
-			arguments[i] = arguments[i].trim(); 
+		String[] argstemp = expr.split(",");
+		arguments = new ArrayList<String>();
+		boolean withinQuote = false;
+		for (int i = 0; i < argstemp.length; i++) {
+			argstemp[i] = argstemp[i].trim();
+			if (argstemp[i].charAt(0) == '"') {
+				withinQuote = true;
+				argstemp[i] = argstemp[i].replace("\"", "");
+				arguments.add(argstemp[i]);
+				continue;
+			}
+			if (withinQuote) {
+				if (argstemp[i].charAt(argstemp[i].length()-1) == '"' ) {
+					withinQuote = false;
+					argstemp[i] = argstemp[i].replace("\"", "");
+				}
+				arguments.set(arguments.size()-1, arguments.get(arguments.size()-1) + "," + argstemp[i]);				
+			} else {
+				arguments.add(argstemp[i]);
+			}
 		}
 		
 		// Check argument validity
-		if ( (type == Aggregator.Type.AGGREGATE_BY && arguments.length != 2)
-			|| (type == Aggregator.Type.AGGREGATE_RANGE && arguments.length != 1)) {
+		if ( (type == Aggregator.Type.AGGREGATE_BY && arguments.size() != 2)
+			|| (type == Aggregator.Type.AGGREGATE_RANGE && arguments.size() != 1)) {
 			throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_AGGREGATOR_EXPRESSION);
 		}
 	}

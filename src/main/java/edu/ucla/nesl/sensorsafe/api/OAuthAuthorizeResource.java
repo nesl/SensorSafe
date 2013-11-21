@@ -14,6 +14,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.SecurityContext;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiParam;
@@ -46,7 +47,7 @@ public class OAuthAuthorizeResource {
     })
 	public String authorize(
 			@ApiParam(name = "oauth_token", required = true)
-			@QueryParam("oauth_token") String oauthToken) {
+			@QueryParam("oauth_token") String oauthToken) throws JsonProcessingException {
 		
 		if (oauthToken == null) {
 			throw WebExceptionBuilder.buildBadRequest("oauth_token is null.");
@@ -77,7 +78,7 @@ public class OAuthAuthorizeResource {
 		}
 		
 		if (consumerName == null) {
-			throw WebExceptionBuilder.buildInternalServerError("consumerName is null.");
+			throw WebExceptionBuilder.buildInternalServerError(new IllegalStateException("consumerName is null."));
 		}
 		
 		Set<String> roles = new HashSet<String>();

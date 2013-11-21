@@ -18,6 +18,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.SecurityContext;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiParam;
@@ -45,7 +46,7 @@ public class RuleResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-	public List<Rule> doGet() {
+	public List<Rule> doGet() throws JsonProcessingException {
 		String ownerName = securityContext.getUserPrincipal().getName();
     	List<Rule> rules = null;
     	StreamDatabaseDriver db = null;
@@ -75,7 +76,7 @@ public class RuleResource {
     })
     public ResponseMsg doPost(
     		@ApiParam(name = "rule", value = "Please refer to the description below.")
-    		@Valid Rule rule) {
+    		@Valid Rule rule) throws JsonProcessingException {
     	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {
@@ -103,7 +104,7 @@ public class RuleResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-    public ResponseMsg doDelete(@QueryParam("id") int id) {
+    public ResponseMsg doDelete(@QueryParam("id") int id) throws JsonProcessingException {
     	String ownerName = securityContext.getUserPrincipal().getName();
     	StreamDatabaseDriver db = null;
     	try {

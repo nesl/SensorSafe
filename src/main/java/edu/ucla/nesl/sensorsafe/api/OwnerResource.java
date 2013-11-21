@@ -18,6 +18,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.SecurityContext;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.wordnik.swagger.annotations.Api;
 import com.wordnik.swagger.annotations.ApiOperation;
 import com.wordnik.swagger.annotations.ApiParam;
@@ -46,7 +47,7 @@ public class OwnerResource {
     @ApiResponses(value = {
     		@ApiResponse(code = 500, message = "Internal Server Error")
     })
-	public List<User> getOwnerList() {		
+	public List<User> getOwnerList() throws JsonProcessingException {		
 		UserDatabaseDriver db = null;
 		List<User> owners = null;
 		try {
@@ -87,7 +88,7 @@ public class OwnerResource {
 					, value = "Only username and password required.  If email is provided, "
 							+ "the server will send an email with Apikey."
 					, required = true)
-			User newOwner) {
+			User newOwner) throws JsonProcessingException {
 		
 		UserDatabaseDriver db = null;
 		try {
@@ -117,7 +118,7 @@ public class OwnerResource {
     })
 	public ResponseMsg deleteOwner(
 			@ApiParam(name = "username", value = "Enter a username you want to delete.", required = true)
-			@QueryParam("username") String ownerName) {
+			@QueryParam("username") String ownerName) throws JsonProcessingException {
 		Log.info(ownerName);
 		UserDatabaseDriver db = null;
 		try {

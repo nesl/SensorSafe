@@ -86,4 +86,6 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 
 	public void createRuleFromTemplate(String ownerName,
 			TemplateParameterDefinition params) throws SQLException;
+
+	public Stream getQueryResultStreamInfo();
 }

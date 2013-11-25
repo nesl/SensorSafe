@@ -4,31 +4,35 @@ import java.util.Random;
 
 public class DiffPrivNoiseGenerator {
 
-	private static final double epsilon;
-
-	static {
+	/*static {
 		// Calculate machine epsilon value;
 		float eps = 1.0f;
 		do {
 			eps /= 2.0f;
 		} while ((float) (1.0 + (eps / 2.0)) != 1.0);
 		epsilon = eps;
-	}
+	}*/
 
 	private Random random = new Random();    	
+	private double epsilon;
 	private double min;
 	private double max;
 	private double delta;
 
-	public DiffPrivNoiseGenerator(double min, double max) {
+	public DiffPrivNoiseGenerator(double epsilon, double min, double max) {
 		this.random = new Random();
+		this.epsilon = epsilon;
 		this.min = min;
 		this.max = max;
 		this.delta = Math.abs(max - min);
 	}
 
 	public double getAvgNoise(int n) {
-		double lambda = epsilon * ( (double)n / delta);
+		Log.info("n = " + n + ", delta = " + delta);
+		if (n <= 0) {
+			throw new IllegalStateException("Invalid n: " + n);
+		}
+		double lambda = epsilon * ( n / delta);
 		return getLaplaceRandom(lambda);
 	}
 
@@ -47,7 +51,7 @@ public class DiffPrivNoiseGenerator {
 		return getLaplaceRandom(lambda);
 	}
 
-	public double getNthNoise(double delta) {
+	public double getNthNoise() {
 		double lambda = epsilon * ( 1.0 / delta );
 		return getLaplaceRandom(lambda);
 	}

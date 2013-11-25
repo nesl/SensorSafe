@@ -15,7 +15,7 @@ import com.wordnik.swagger.annotations.ApiModelProperty;
 import edu.ucla.nesl.sensorsafe.db.informix.Aggregator;
 
 @ApiModel(value = "Rule")
-@XmlRootElement(name = "rule")
+@XmlRootElement
 public class Rule {
 
 	private static final String[] VALID_RULE_ACTIONS = { "allow", "deny" }; 

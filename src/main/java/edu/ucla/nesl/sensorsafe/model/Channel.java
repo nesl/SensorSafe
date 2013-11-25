@@ -20,6 +20,9 @@ public class Channel {
 	@ApiModelProperty(value = "Channel type", required = true, allowableValues = "float,int,text")
 	@NotNull
 	public String type;
+	
+	@XmlElement(name = "statistics")
+	public Statistics statistics;
 
 	public Channel() {}
 	

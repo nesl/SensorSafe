@@ -75,22 +75,26 @@ public class StreamResource {
 			+ "&emsp;&emsp;  e.g., activity.value = 'still'<BR>"
 			+ "<BR>"
 			+ "<BR>"
-			+ "aggregator<BR>"
+			+ "<b>aggregator</b><BR>"
 			+ "<BR>"
 			+ "Examples:<BR>"
 			+ "&emsp;  AggregateBy( \"avg($channel1), avg($channel2), avg($channel3)\", \"1week\")<BR>"
-			+ "&emsp;  AggregateRange( \"max($value), min($value)\" )<BR>"
+			+ "&emsp;  NoisyAggregateBy( \"avg($channel1), avg($channel2), avg($channel3)\", \"1week\", 0.01)<BR>"
+			+ "&emsp;  AggregateRange( \"avg($value), max($value)\" )<BR>"
+			+ "&emsp;  NoisyAggregateRange( \"avg($value), max($value)\", 0.01 )<BR>"
 			+ "<BR>"
 			+ "- AggregateBy(expression, calendar)<BR>"
 			+ "&emsp;  Down sample time series to the calendar, e.g., every 1 seconds to every 1 hour.<BR>"
-			+ "<BR>"
 			+ "- AggregateRange(expression)<BR>"
 			+ "&emsp;  Calculate expression on entire range specified, e.g., average from January to June.<BR>"
+			+ "- NoisyAggregateBy(expression, calendar, epsilon)<BR>"
+			+ "- NoisyAggregateRange(expression, epsilon)<BR>"
+			+ "&emsp;  epsilon-differentially private version of the function.<BR>"
 			+ "<BR>"
 			+ "+ expression: MIN, MAX, MEDIAN, SUM, AVG, FIRST, LAST, or Nth.<BR>"
 			+ "&emsp;  e.g., min($value), max($value), median($value), sum($value), avg($value), first($value), last($value), Nth($value, 10)<BR>"
-			+ "<BR>"
 			+ "+ calendar: 1min, 15min, 30min, 1hour, 1day, 1week, 1month, or 1year<BR>"
+			+ "+ epsilon: Prameter to e-differentially private noise generator. The smaller, the more private. Typical value smaller than 0.1.<BR>"
 			+ "<BR>";
 
 	@Context
@@ -264,8 +268,10 @@ public class StreamResource {
 			db = DatabaseConnector.getStreamDatabase();
 			db.addTuple(ownerName, streamName, strTuple);
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException e) {
+			e.printStackTrace();
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
 			throw WebExceptionBuilder.buildBadRequest(e);
 		} finally {
 			if (db != null) {
@@ -356,8 +362,10 @@ public class StreamResource {
 							}
 							IOUtils.write("]}", output);
 						} catch (SQLException | ClassNotFoundException | NamingException | UnsupportedOperationException e) {
+							e.printStackTrace();
 							throw WebExceptionBuilder.buildInternalServerError(e);
 						} catch (IllegalArgumentException e) {
+							e.printStackTrace();
 							throw WebExceptionBuilder.buildBadRequest(e);
 						} finally {
 							if (db != null) {
@@ -372,8 +380,10 @@ public class StreamResource {
 				};
 			}
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException | UnsupportedOperationException e) {
+			e.printStackTrace();
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
 			throw WebExceptionBuilder.buildBadRequest(e);
 		} finally {
 			if (db != null) {

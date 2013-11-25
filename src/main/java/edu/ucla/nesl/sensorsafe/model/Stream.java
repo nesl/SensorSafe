@@ -15,7 +15,7 @@ import com.wordnik.swagger.annotations.ApiModel;
 import com.wordnik.swagger.annotations.ApiModelProperty;
 
 @ApiModel(value = "Stream definition.")
-@XmlRootElement(name = "stream")
+@XmlRootElement
 public class Stream {
 	
 	@XmlElement(name = "name")

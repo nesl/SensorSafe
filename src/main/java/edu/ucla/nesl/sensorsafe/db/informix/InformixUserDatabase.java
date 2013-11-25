@@ -63,14 +63,6 @@ public class InformixUserDatabase extends InformixDatabaseDriver implements User
 												+ OAUTH_ACCESS_SECRET_FIELD;
 
 	
-	static {
-		try {
-			initializeDatabase();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		}
-	}
-
 	public void clean() throws SQLException {
 		Statement stmt = null;
 		try {

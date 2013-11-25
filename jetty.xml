@@ -46,12 +46,12 @@
 				<Set name="IfxIFXHOST">sensorsafe</Set>
 				<Set name="PortNumber">61000</Set>
 				<Set name="IfxCPMMaxConnections">-1</Set>
-				<Set name="IfxCPMInitPoolSize">0</Set>
-				<Set name="IfxCPMMinPoolSize">8</Set>
-				<Set name="IfxCPMMaxPoolSize">80</Set>
-				<Set name="IfxCPMServiceInterval">100</Set>
-				<Set name="IfxCPMAgeLimit">7200</Set>
-				<Set name="IfxCPMMinAgeLimit">3600</Set>
+				<Set name="IfxCPMInitPoolSize">100</Set>
+				<Set name="IfxCPMMinPoolSize">100</Set>
+				<Set name="IfxCPMMaxPoolSize">-1</Set>
+				<Set name="IfxCPMServiceInterval">50</Set>
+				<Set name="IfxCPMAgeLimit">-1</Set>
+				<Set name="IfxCPMMinAgeLimit">-1</Set>
 			</New>
 		</Arg>
 	</New>

@@ -8,7 +8,7 @@ import com.wordnik.swagger.annotations.ApiModel;
 import com.wordnik.swagger.annotations.ApiModelProperty;
 
 @ApiModel(value = "User information.")
-@XmlRootElement(name = "user")
+@XmlRootElement
 public class User {
 
 	@XmlElement(name = "username")

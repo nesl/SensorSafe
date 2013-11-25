@@ -11,9 +11,12 @@ import java.util.regex.Pattern;
 import edu.ucla.nesl.sensorsafe.model.Channel;
 
 public class Aggregator {
+	
 	public static enum Type { AGGREGATE_BY, AGGREGATE_RANGE };
-	public static Map<Type, String[]> aggregatorNameMap = new HashMap<Type, String[]>();
-
+	
+	private static Map<Type, String[]> aggregatorNameMap = new HashMap<Type, String[]>();
+	private static String NOISY_PREFIX = "Noisy"; 
+	
 	static {
 		aggregatorNameMap.put(Type.AGGREGATE_BY, new String[] { "AggregateBy", "DownSample" });
 		aggregatorNameMap.put(Type.AGGREGATE_RANGE, new String[] { "AggregateRange", "Calculate" });
@@ -21,10 +24,13 @@ public class Aggregator {
 
 	public Type aggregator;
 	public String sqlExpression;
-	public String oriSqlExpression;
 	public String calendar;
+	public List<Channel> channels;
 	public List<Channel> targetStreamChannels;
-
+	public boolean isNoisy = false;
+	public boolean isAvgAggregator = false;
+	public double epsilon = Double.NaN;
+	
 	public Aggregator(String expr, List<Channel> channels) {
 		expr = expr.trim();
 		if (expr.charAt(expr.length()-1) != ')') {
@@ -32,6 +38,11 @@ public class Aggregator {
 		}
 
 		// Find out aggregator type.
+		if (expr.toLowerCase().startsWith(NOISY_PREFIX.toLowerCase())) {
+			isNoisy = true;
+			expr = expr.replace(NOISY_PREFIX, "");
+		}
+		
 		for (Entry<Type, String[]> entry: aggregatorNameMap.entrySet()) {
 			for (String name: entry.getValue()) {
 				if (expr.toLowerCase().startsWith(name.toLowerCase() + "(")) {
@@ -46,7 +57,7 @@ public class Aggregator {
 			throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_AGGREGATOR_EXPRESSION);
 		}
 		
-		// Get arguments.
+		// Extract aggregate arguments and properly split.
 		String[] argstemp = expr.split(",");
 		List<String> arguments = new ArrayList<String>();
 		boolean withinQuote = false;
@@ -70,19 +81,42 @@ public class Aggregator {
 		}
 		
 		// Check argument validity
-		if (aggregator == Aggregator.Type.AGGREGATE_BY && arguments.size() == 2) {
-			sqlExpression = arguments.get(0);
-			calendar = determineCalendar(arguments.get(1));
-		} else if (aggregator == Aggregator.Type.AGGREGATE_RANGE && arguments.size() == 1) {
-			sqlExpression = arguments.get(0);
+		if (isNoisy) {
+			if (aggregator == Aggregator.Type.AGGREGATE_BY && arguments.size() == 3) {
+				sqlExpression = arguments.get(0);
+				calendar = determineCalendar(arguments.get(1));
+				epsilon = Double.valueOf(arguments.get(2));
+			} else if (aggregator == Aggregator.Type.AGGREGATE_RANGE && arguments.size() == 2) {
+				sqlExpression = arguments.get(0);
+				epsilon = Double.valueOf(arguments.get(1));
+			} else {
+				throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_AGGREGATOR_EXPRESSION);
+			}
 		} else {
-			throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_AGGREGATOR_EXPRESSION);
+			if (aggregator == Aggregator.Type.AGGREGATE_BY && arguments.size() == 2) {
+				sqlExpression = arguments.get(0);
+				calendar = determineCalendar(arguments.get(1));
+			} else if (aggregator == Aggregator.Type.AGGREGATE_RANGE && arguments.size() == 1) {
+				sqlExpression = arguments.get(0);
+			} else {
+				throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_AGGREGATOR_EXPRESSION);
+			}
 		}
 		
-		oriSqlExpression = sqlExpression;
+		// determine if avg aggregator
+		if (sqlExpression.toLowerCase().contains("avg")) {
+			isAvgAggregator = true;
+		} else {
+			isAvgAggregator = false;
+		}
+		
+		// Set aggregate channel names and convert sql expression channel names.
+		String oriSqlExpression = sqlExpression;
 		targetStreamChannels = channels;
 		
 		convertSqlExprChannelNames();
+		
+		setAggregateChannels(oriSqlExpression);
 	}
 
 	private void convertSqlExprChannelNames() {
@@ -156,9 +190,9 @@ public class Aggregator {
 		return false;
 	}
 	
-	public List<Channel> getAggregateChannels() {
+	private void setAggregateChannels(String oriSqlExpression) {
 		String[] aggExprChannels = oriSqlExpression.split(",");
-		List<Channel> aggChannels = new ArrayList<Channel>();
+		channels = new ArrayList<Channel>();
 		Pattern columnPattern = Pattern.compile("\\$channel[0-9]+");
 		Pattern integerPattern = Pattern.compile("[0-9]+");
 		Matcher columnMatcher = columnPattern.matcher(sqlExpression);
@@ -168,14 +202,22 @@ public class Aggregator {
 			Matcher integerMatcher = integerPattern.matcher(column);
 			while (integerMatcher.find()) {
 				int channelNum = Integer.valueOf(integerMatcher.group());
-				aggChannels.add(new Channel(aggExprChannels[i++], targetStreamChannels.get(channelNum-1).type));
+				if (!targetStreamChannels.get(channelNum-1).type.equals("float")
+						&& !targetStreamChannels.get(channelNum-1).type.equals("int")) {
+					throw new IllegalArgumentException("Aggregate on non-numeric data type is not allowed.");
+				}
+				channels.add(new Channel(
+						aggExprChannels[i++], 
+						"float"
+				));
 			}
 		}
-		
-		if (aggChannels.size() <= 0) {
+		if (channels.size() <= 0) {
 			throw new IllegalArgumentException("Invalid aggregate expression.");
 		}
-		
-		return aggChannels;
+	}
+
+	public boolean isNoisy() {
+		return isNoisy;
 	}
 }

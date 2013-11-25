@@ -38,7 +38,6 @@ public class SqlBuilder {
 	public String condFilter;
 	public String condRules;
 	
-	public int streamID;
 	public int offset;
 	public int limit;
 	public Timestamp startTime;
@@ -47,7 +46,6 @@ public class SqlBuilder {
 	public Stream stream;
 	
 	public SqlBuilder(int offset, int limit, Timestamp startTime, Timestamp endTime, String filter, Stream stream) {
-		this.streamID = stream.id;
 		this.offset = offset;
 		this.limit = limit;
 		this.startTime = startTime;
@@ -121,7 +119,7 @@ public class SqlBuilder {
 			i += 1;
 		}
 		if (condStreamID != null) {
-			pstmt.setInt(i, streamID);
+			pstmt.setInt(i, stream.id);
 			i += 1;
 		}
 		if (startTime != null) {

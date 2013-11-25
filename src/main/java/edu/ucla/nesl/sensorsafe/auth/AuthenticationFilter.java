@@ -31,6 +31,18 @@ public class AuthenticationFilter implements ContainerRequestFilter {
 
 	@Override
 	public void filter(ContainerRequestContext request) throws IOException {
+		
+		// Dump Headers
+		/*for (Entry<String, List<String>> entry: request.getHeaders().entrySet()) {
+			String key = entry.getKey();
+			String values = "";
+			for (String value : entry.getValue()) {
+				values += value + ", ";
+			}
+			values = values.substring(0, values.length() - 2);
+			Log.info(key + ": " + values);
+		}*/
+		
 		String authorization = request.getHeaderString(AUTHORIZATION_HEADER);
 		String apikey = null;
 		for (String apikeyHeader: API_KEY_HEADERS) {

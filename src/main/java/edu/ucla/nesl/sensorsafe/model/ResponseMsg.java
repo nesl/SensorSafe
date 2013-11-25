@@ -12,7 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.jaxb.JaxbAnnotationIntrospector;
 import com.wordnik.swagger.annotations.ApiModelProperty;
 
-@XmlRootElement(name = "responseMsg")
+@XmlRootElement
 public class ResponseMsg {
 
 	@XmlElement(name = "message")

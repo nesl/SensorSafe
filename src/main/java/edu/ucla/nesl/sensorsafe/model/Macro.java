@@ -8,7 +8,7 @@ import com.wordnik.swagger.annotations.ApiModel;
 import com.wordnik.swagger.annotations.ApiModelProperty;
 
 @ApiModel(value = "Macro")
-@XmlRootElement(name = "macro")
+@XmlRootElement
 public class Macro {
 
 	@XmlElement(name = "id")

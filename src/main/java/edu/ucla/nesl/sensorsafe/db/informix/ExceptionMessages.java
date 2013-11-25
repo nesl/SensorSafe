@@ -7,4 +7,5 @@ public class ExceptionMessages {
 	public static final String MSG_UNSUPPORTED_TUPLE_FORMAT = "Unsupported tuple format.";
 	public static final String MSG_INVALID_CALENDAR_TYPE = "Invalid calendar type. Supported types are: 1min, 15min, 30min, 1hour, 1day, 1week, 1month, 1year";
 	public static final String MSG_INVALID_AGGREGATOR_EXPRESSION = "Invalid aggregator expression.";
+	public static final String MSG_INVALID_NUM_AGGREGATOR_ARGUMENTS = "Invalid number of aggregator arguments was provided.";
 }

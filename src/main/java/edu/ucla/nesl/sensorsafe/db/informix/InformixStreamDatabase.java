@@ -1081,7 +1081,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		if ( !isStreamNameExist(streamOwner, streamName) )
 			throw new IllegalArgumentException("Stream (" + streamName + ") of owner (" + streamOwner + ") does not exists.");
 
-		// Check timestamps
+		// Check valid timestamps
 		Timestamp startTs = null, endTs = null;
 		DateTime startDateTime = null, endDateTime = null;
 		if (startTime != null) {
@@ -1121,7 +1121,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				sql.condFilter = null;
 				
 				sql = processConditionOnOtherStreams(sql, streamOwner);
-				sql = processFilterForAggregate(agg, sql);
+				if (sql.condRules != null) {
+					sql = processFilterForAggregate(agg, sql);
+				}
 				sql = processAggregate(agg, sql);
 				
 				sql.condFilter = tempCondFilter;
@@ -1136,13 +1138,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		if (aggregator != null) {
 			Aggregator agg = new Aggregator(aggregator, stream.channels);
 			
-			if (sql.condFilter == null && sql.condRules == null) {
-				// If aggregator with no filter, no rules, we can skip creating temporary filtered result.
-				sql = processAggregate(agg, sql);
-			} else {
+			// If aggregator with no filter, no rules, we can skip creating temporary filtered result.
+			if (sql.condFilter != null || sql.condRules != null) {
 				sql = processFilterForAggregate(agg, sql);
-				sql = processAggregate(agg, sql);
 			}
+			sql = processAggregate(agg, sql);
 		}
 		
 		executeQuery(sql, stream);
@@ -1522,7 +1522,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	private SqlBuilder processFilterForAggregate(Aggregator agg, SqlBuilder sql) throws SQLException {
 
 		// Limit the duration.
-		//checkStartEndTimeDuration(sql);
+		checkStartEndTimeDuration(sql);
 
 		//Get row type for this stream
 		String rowtype = sql.stream.getRowTypeName();

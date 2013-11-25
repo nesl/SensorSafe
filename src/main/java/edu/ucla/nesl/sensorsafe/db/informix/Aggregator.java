@@ -90,7 +90,7 @@ public class Aggregator {
 				sqlExpression = arguments.get(0);
 				epsilon = Double.valueOf(arguments.get(1));
 			} else {
-				throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_AGGREGATOR_EXPRESSION);
+				throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_NUM_AGGREGATOR_ARGUMENTS);
 			}
 		} else {
 			if (aggregator == Aggregator.Type.AGGREGATE_BY && arguments.size() == 2) {
@@ -99,7 +99,7 @@ public class Aggregator {
 			} else if (aggregator == Aggregator.Type.AGGREGATE_RANGE && arguments.size() == 1) {
 				sqlExpression = arguments.get(0);
 			} else {
-				throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_AGGREGATOR_EXPRESSION);
+				throw new IllegalArgumentException(ExceptionMessages.MSG_INVALID_NUM_AGGREGATOR_ARGUMENTS);
 			}
 		}
 		
@@ -176,6 +176,12 @@ public class Aggregator {
 	
 	public static boolean isAggregateExpression(String expr) {
 		expr = expr.trim();
+
+		// Find out aggregator type.
+		if (expr.toLowerCase().startsWith(NOISY_PREFIX.toLowerCase())) {
+			expr = expr.replace(NOISY_PREFIX, "");
+		}
+
 		if (expr.charAt(expr.length()-1) != ')') {
 			return false;
 		}

@@ -2,6 +2,7 @@ package edu.ucla.nesl.sensorsafe.db;
 
 import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -26,7 +27,7 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	
 	public void addTuple(String owner, String streamName, String strTuple) throws SQLException;
 	
-	public boolean prepareQuery(String requestingUser,	 String streamOwner, String streamName, String startTime, String endTime, String aggregator, String filter, int limit, int offset) throws SQLException, JsonProcessingException, ClassNotFoundException;
+	public boolean prepareQuery(String requestingUser,	 String streamOwner, String streamName, String startTime, String endTime, String aggregator, String filter, int limit, int offset, boolean isUpdateNumSamples) throws SQLException, JsonProcessingException, ClassNotFoundException;
 	
 	public Stream getStream(String owner, String name) 	throws SQLException;
 	
@@ -41,8 +42,6 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public void deleteRule(String remoteUser, int id) throws SQLException;
 
 	public void bulkLoad(String owner, String streamName, String data) throws SQLException, IOException, NoSuchAlgorithmException;
-
-	public JSONArray getNextJsonTuple() throws SQLException;
 
 	public void addOrUpdateMacro(String owner, Macro macro) throws SQLException;
 
@@ -60,5 +59,9 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 
 	public void createRuleFromTemplate(String ownerName, TemplateParameterDefinition params) throws SQLException;
 
-	public Stream getQueryResultStreamInfo();
+	public Stream getStoredStreamInfo();
+
+	public Object[] getNextTuple() throws SQLException;
+
+	public ResultSet getStoredResultSet();
 }

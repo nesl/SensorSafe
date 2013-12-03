@@ -240,7 +240,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			conn.setTypeMap(typeMap);
 			
 			// check channel statistics table.
-			checkChannelStatistics(conn);
+			//TODO: checkChannelStatistics(conn);
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
@@ -1075,7 +1075,8 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			String aggregator,
 			String filter,
 			int limit, 
-			int offset) throws SQLException, ClassNotFoundException {
+			int offset,
+			boolean isUpdateNumSamples) throws SQLException, ClassNotFoundException {
 
 		// Check if stream name exists.
 		if ( !isStreamNameExist(streamOwner, streamName) )
@@ -1145,7 +1146,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			sql = processAggregate(agg, sql);
 		}
 		
-		executeQuery(sql, stream);
+		executeQuery(sql, stream, isUpdateNumSamples);
 		
 		return true;
 	}
@@ -1183,9 +1184,16 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 
-	private void executeQuery(SqlBuilder sql, Stream stream) throws SQLException {
+	private void executeQuery(SqlBuilder sql, Stream stream, boolean isUpdateNumSamples) throws SQLException {
 		PreparedStatement pstmt = null;
 		try {
+			// Get number of samples.
+			if (isUpdateNumSamples) {
+				long n = executeGetCountSql(sql.streamTableName, stream.id, sql.startTime, sql.endTime);
+				stream.num_samples = n;
+			}
+			
+			// Query actual data.
 			String sqlStr = sql.buildSqlStatement(); 
 			Log.info(sqlStr);
 			pstmt = sql.getPreparedStatement(conn, sqlStr);
@@ -1340,9 +1348,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				}
 
 				if (prevTs != null && prevValues != null) {
-					int n = -1;
+					long n = -1;
 					if (agg.isAvgAggregator) {
-						n = executeClipGetCount(sql, aggTargetStreamTableName, prevTs, timestamp);
+						n = executeGetCountSql(aggTargetStreamTableName, sql.stream.id, prevTs, timestamp);
 					}
 					addNoiseAndExecuteUpdate(pstmt2, agg, prevTs, prevValues, noiseGenerators, n);
 				}
@@ -1351,9 +1359,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				prevValues = values;
 			}
 			// Process last aggregate
-			int n = -1;
+			long n = -1;
 			if (agg.isAvgAggregator) {
-				n = executeClipGetCount(sql, aggTargetStreamTableName, prevTs, sql.endTime);
+				n = executeGetCountSql(aggTargetStreamTableName, sql.stream.id, prevTs, sql.endTime);
 			}
 			addNoiseAndExecuteUpdate(pstmt2, agg, prevTs, prevValues, noiseGenerators, n);
 			
@@ -1372,16 +1380,25 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return sql;
 	}
 
-	private int executeClipGetCount(SqlBuilder sql, String aggTargetStreamTableName, Timestamp startTs, Timestamp endTs) throws SQLException {
+	private long executeGetCountSql(String streamTableName, int streamId, Timestamp startTs, Timestamp endTs) throws SQLException {
 		int numSamples;
 		PreparedStatement pstmt = null;
-		String selectSql = "SELECT ClipGetCount(tuples,?,?) FROM " + aggTargetStreamTableName + " WHERE id = ?";
-		Log.info(selectSql);
+		String countSql;
+		if (startTs == null && endTs == null) {
+			countSql = "SELECT GetNElems(tuples) FROM " + streamTableName + " WHERE id = ?";
+		} else {
+			countSql = "SELECT ClipGetCount(tuples,?,?) FROM " + streamTableName + " WHERE id = ?";	
+		}
+		Log.info(countSql);
 		try {
-			pstmt = conn.prepareStatement(selectSql);
-			pstmt.setTimestamp(1, startTs);
-			pstmt.setTimestamp(2, endTs);
-			pstmt.setInt(3, sql.stream.id);
+			pstmt = conn.prepareStatement(countSql);
+			if (startTs != null || endTs != null) {
+				pstmt.setTimestamp(1, startTs);
+				pstmt.setTimestamp(2, endTs);
+				pstmt.setInt(3, streamId);
+			} else {
+				pstmt.setInt(1, streamId);
+			}
 			ResultSet rset = pstmt.executeQuery();
 			if (!rset.next()) {
 				throw new IllegalStateException("ResultSet of ClipGetCount() is null.");
@@ -1400,7 +1417,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return numSamples;
 	}
 
-	private void addNoiseAndExecuteUpdate(PreparedStatement pstmt, Aggregator agg, Timestamp timestamp, List<Double> values, List<DiffPrivNoiseGenerator> noiseGenerators, int n) throws SQLException {
+	private void addNoiseAndExecuteUpdate(PreparedStatement pstmt, Aggregator agg, Timestamp timestamp, List<Double> values, List<DiffPrivNoiseGenerator> noiseGenerators, long n) throws SQLException {
 		addNoiseToValues(values, agg.channels, noiseGenerators, n);
 		
 		pstmt.setTimestamp(2, timestamp);
@@ -1439,7 +1456,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return list;
 	}
 
-	private void addNoiseToValues(List<Double> values, List<Channel> channels, List<DiffPrivNoiseGenerator> noiseGenerators, int n) {
+	private void addNoiseToValues(List<Double> values, List<Channel> channels, List<DiffPrivNoiseGenerator> noiseGenerators, long n) {
 		for (int i = 0; i < values.size(); i++) {
 			double value = values.get(i);
 			double noise = getNoise(channels.get(i).name, noiseGenerators.get(i), n);
@@ -1448,7 +1465,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 	
-	private double getNoise(String name, DiffPrivNoiseGenerator noiseGenerator, int n) {
+	private double getNoise(String name, DiffPrivNoiseGenerator noiseGenerator, long n) {
 		name = name.toLowerCase();
 		if (name.contains("avg")) {
 			return noiseGenerator.getAvgNoise(n);
@@ -1818,7 +1835,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	}
 
 	@Override
-	public JSONArray getNextJsonTuple() throws SQLException {
+	public Object[] getNextTuple() throws SQLException {
 		if (storedResultSet == null) {
 			cleanUpStoredInfo();
 			return null;
@@ -1829,30 +1846,20 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			return null;
 		}
 
-		int i;
 		if (storedResultSet.next()) {
-			JSONArray curTuple = new JSONArray();
-			curTuple.add(storedResultSet.getTimestamp(2).toString());
-			i = 3;
-			for (Channel channel: storedStream.channels) {
-				if (channel.type.equals("float")) {
-					curTuple.add(storedResultSet.getDouble(i));
-				} else if (channel.type.equals("int")) {
-					curTuple.add(storedResultSet.getInt(i));
-				} else if (channel.type.equals("text")) {
-					curTuple.add(storedResultSet.getString(i));
-				} else {
-					throw new UnsupportedOperationException(ExceptionMessages.MSG_UNSUPPORTED_TUPLE_FORMAT);
-				}
-				i += 1;
+			Object[] tuple = new Object[storedStream.channels.size() + 1];
+			tuple[0] = storedResultSet.getTimestamp(2).getTime(); // epoch in ms.
+			int startColIdx = 3;
+			for (int i = 0; i < storedStream.channels.size(); i++) {
+				tuple[i + 1] = storedResultSet.getObject(startColIdx + i);
 			}
-			return curTuple;
+			return tuple;
 		} else {
 			cleanUpStoredInfo();
 			return null;
 		}
 	}
-
+	
 	private String getRuleCondition(String streamOwner, String requestingUser, Stream stream) throws SQLException {
 
 		PreparedStatement pstmt = null;
@@ -2604,7 +2611,12 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	}
 
 	@Override
-	public Stream getQueryResultStreamInfo() {
+	public Stream getStoredStreamInfo() {
 		return storedStream;
+	}
+	
+	@Override
+	public ResultSet getStoredResultSet() {
+		return storedResultSet;
 	}
 }

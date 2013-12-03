@@ -27,7 +27,7 @@ public class DiffPrivNoiseGenerator {
 		this.delta = Math.abs(max - min);
 	}
 
-	public double getAvgNoise(int n) {
+	public double getAvgNoise(long n) {
 		Log.info("n = " + n + ", delta = " + delta);
 		if (n <= 0) {
 			throw new IllegalStateException("Invalid n: " + n);

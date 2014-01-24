@@ -1,8 +1,16 @@
 package edu.ucla.nesl.sensorsafe.api;
 
 import java.awt.Font;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.security.NoSuchAlgorithmException;
@@ -10,6 +18,9 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import javax.annotation.security.PermitAll;
 import javax.annotation.security.RolesAllowed;
@@ -77,7 +88,9 @@ public class StreamResource {
 
 	private static final int ROW_LIMIT_WITHOUT_HTTP_STREAMING = 100;
 	private static final long MAX_PLOT_DATA_LIMIT = 100000;
-	
+	private static final String TEMP_ZIP_FILE_PREFIX = "/tmp/zip_file_";
+	private static final int BUFFER_SIZE = 4096;
+
 	private static final String GET_STREAM_NOTES =
 			"<BR>"
 					+ "<b>filter</b><BR>"
@@ -258,6 +271,213 @@ public class StreamResource {
 		return new ResponseMsg("Successfully completed bulkloading.");
 	}
 
+	private String newUUIDString() {
+		String tmp = UUID.randomUUID().toString();
+		return tmp.replaceAll("-", "");
+	}
+
+	public static String unzip(String zipFile, String location) throws IOException {
+		int size;
+		byte[] buffer = new byte[BUFFER_SIZE];
+
+		if ( !location.endsWith("/") ) {
+			location += "/";
+		}
+		File f = new File(location);
+		if(!f.isDirectory()) {
+			f.mkdirs();
+		}
+		ZipInputStream zin = new ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile), BUFFER_SIZE));
+		String fileName = null;
+		try {
+			ZipEntry ze = null;
+
+			while ((ze = zin.getNextEntry()) != null) {
+				String path = location + ze.getName();
+				File unzipFile = new File(path);
+
+				if (ze.isDirectory()) {
+					throw new UnsupportedOperationException("Error: The zip file contains directory.");
+				} else {
+					if (fileName != null) {
+						throw new UnsupportedOperationException("Error: The zip file contains more than a single file.");
+					}
+
+					fileName = path;
+
+					// check for and create parent directories if they don't exist
+					File parentDir = unzipFile.getParentFile();
+					if ( null != parentDir ) {
+						if ( !parentDir.isDirectory() ) {
+							parentDir.mkdirs();
+						}
+					}
+
+					// unzip the file
+					FileOutputStream out = new FileOutputStream(unzipFile, false);
+					BufferedOutputStream fout = new BufferedOutputStream(out, BUFFER_SIZE);
+					try {
+						while ( (size = zin.read(buffer, 0, BUFFER_SIZE)) != -1 ) {
+							fout.write(buffer, 0, size);
+						}
+						zin.closeEntry();
+					}
+					finally {
+						fout.flush();
+						fout.close();
+					}
+				}
+			}
+		}
+		finally {
+			zin.close();
+		}
+
+		return fileName;
+	}
+
+	private static String readEntireFile(String filename) throws IOException {
+		FileReader in = new FileReader(filename);
+		StringBuilder contents = new StringBuilder();
+		char[] buffer = new char[BUFFER_SIZE];
+		int read = 0;
+		do {
+			contents.append(buffer, 0, read);
+			read = in.read(buffer);
+		} while (read >= 0);
+		in.close();
+		return contents.toString();
+	}
+
+	public static void deleteFile(File file) throws IOException{
+		if(file.isDirectory()) {
+			//directory is empty, then delete it
+			if(file.list().length == 0) {
+				file.delete();
+			} else {
+				//list all the directory contents
+				String files[] = file.list();
+
+				for (String temp : files) {
+					//construct the file structure
+					File fileDelete = new File(file, temp);
+
+					//recursive delete
+					deleteFile(fileDelete);
+				}
+
+				//check the directory again, if empty then delete it
+				if(file.list().length == 0) {
+					file.delete();
+				}
+			}
+
+		} else {
+			//if file, then delete it
+			file.delete();
+		}
+	}
+
+	@RolesAllowed(Roles.OWNER)
+	@POST
+	@Path("/{stream_name}.zip")
+	@Consumes("application/zip")
+	@ApiOperation(value = "Load zip file to a stream.", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Interval Server Error")
+	})
+	public ResponseMsg doPostStreamZip(@PathParam("stream_name") String streamName,
+			@ApiParam(name = "str_tuple", 
+			value = "<pre>Usage: attach a zip file containing a single file with the following content:\n"
+					+ "timestamp, 1st_channel, 2nd_channel, 3rd_channel, ..\n"
+					+ "timestamp, 1st_channel, 2nd_channel, 3rd_channel, ..\n"
+					+ ".\n"
+					+ ".\n"
+					+ "\n"
+					+ "e.g.,\n"
+					+ "2013-01-01 09:20:12.12345, 12.4, 1.2, 5.5\n"
+					+ "2013-01-01 09:20:13.12345, 11.4, 3.2, 1.5\n"
+					+ "2013-01-01 09:20:14.12345, 10.4, 4.2, 7.5\n"
+					+ "</pre>")
+	byte[] data) throws JsonProcessingException {
+
+		// Create temporary file
+		DataOutputStream os = null;
+		File file = null;
+		String zipFileName = null;
+		String unzipFolderName = null;
+		try {
+			unzipFolderName = TEMP_ZIP_FILE_PREFIX + newUUIDString(); 
+			zipFileName = unzipFolderName + ".zip";
+			file = new File(zipFileName);
+			if (file.exists()) {
+				file.delete();				
+			}
+			file.createNewFile();
+
+			os = new DataOutputStream(new FileOutputStream(file));
+			os.write(data);
+		} catch (IOException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		} finally {
+			try {
+				if (os != null)
+					os.close();
+			} catch (IOException e) {
+				throw WebExceptionBuilder.buildInternalServerError(e);
+			}
+		}
+
+		// Unzip the file.
+		String unzippedFileName = null;
+		try {
+			unzippedFileName = unzip(zipFileName, unzipFolderName);
+		} catch (IOException | UnsupportedOperationException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		}
+
+		// Read the file into memory.
+		String unzippedData = null;
+		try {
+			unzippedData = readEntireFile(unzippedFileName);
+		} catch (IOException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		}
+
+		// Pass unzipped data to database
+		String ownerName = securityContext.getUserPrincipal().getName();
+		StreamDatabaseDriver db = null;
+		try {
+			db = DatabaseConnector.getStreamDatabase();
+			db.bulkLoad(ownerName, streamName, unzippedData);
+		} catch (SQLException | IOException | ClassNotFoundException | NamingException | NoSuchAlgorithmException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e);
+		} catch (IllegalArgumentException e) {
+			throw WebExceptionBuilder.buildBadRequest(e);
+		} finally {
+			if (db != null) {
+				try {
+					db.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+
+		// Delete temporary files
+		File zipFile = new File(zipFileName);
+		File zipFolder = new File(unzipFolderName);
+		try {
+			deleteFile(zipFile);
+			deleteFile(zipFolder);
+		} catch (IOException e) {
+			throw WebExceptionBuilder.buildInternalServerError(e); 
+		}
+
+		return new ResponseMsg("Successfully completed zip bulkloading.");
+	}
+
+
 	@RolesAllowed(Roles.OWNER)
 	@POST
 	@Path("/{stream_name}")
@@ -349,7 +569,7 @@ public class StreamResource {
 
 			boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, true);
 			Stream stream = db.getStoredStreamInfo();
-			
+
 			if (!isData) {
 				return Response.ok("No data").build();
 			}
@@ -362,12 +582,12 @@ public class StreamResource {
 				}
 				expression = expression.substring(0, expression.length() - 2);
 				aggregator = "AggregateBy( \"" + expression + "\", \"" + calendar + "\" )";
-				
+
 				Log.info("Aggregator: " + aggregator);
-				
+
 				db.close();
 				db = DatabaseConnector.getStreamDatabase();
-				
+
 				isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, true);
 
 				if (!isData) {

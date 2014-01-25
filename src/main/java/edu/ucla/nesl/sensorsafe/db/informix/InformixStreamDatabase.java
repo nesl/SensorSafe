@@ -69,7 +69,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	private static final int TSOPEN_REDUCED_LOG = 256; // Only supported in v12.10
 	//private static final int BULKLOAD_FLAG = TSOPEN_REDUCED_LOG;
 	private static final int BULKLOAD_FLAG = 0;
-	
+
 	private PreparedStatement storedPstmt;
 	private ResultSet storedResultSet;
 	private Stream storedStream;
@@ -288,94 +288,112 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			return;
 		}
 
-		Log.info("Calculating channel statistics: " + s.name + "." + c.name + "...");
+		long numSamples = executeGetCountSql(conn, s.getStreamTableName(), s.id, null, null);
 
-		double min, max;
-
-		String aggregateSql = "SELECT AggregateRange('min($channel" + channelId + ")', tuples, 0)::float_rowtype"
-				+ " FROM " + s.getStreamTableName() + " WHERE id = ?";
-
-		PreparedStatement pstmt = null;
-		try {
-			pstmt = conn.prepareStatement(aggregateSql);
-			pstmt.setInt(1, s.id);
-			ResultSet rset = pstmt.executeQuery();
-			if (rset.next()) {
-				Struct struct = (Struct)rset.getObject(1);
-				min = (Double)struct.getAttributes()[1];
-			} else {
-				throw new IllegalStateException("ResultSet is null.");
-			}
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-		}
-
-		aggregateSql = "SELECT AggregateRange('max($channel" + channelId + ")', tuples, 0)::float_rowtype"
-				+ " FROM " + s.getStreamTableName() + " WHERE id = ?";
-
-		try {
-			pstmt = conn.prepareStatement(aggregateSql);
-			pstmt.setInt(1, s.id);
-			ResultSet rset = pstmt.executeQuery();
-			if (rset.next()) {
-				Struct struct = (Struct)rset.getObject(1);
-				max = (Double)struct.getAttributes()[1];
-			} else {
-				throw new IllegalStateException("ResultSet is null.");
-			}
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-				pstmt = null;
-			}
-		}
-
-		// Check if there is existing statistics
-		String sql = "SELECT * FROM channel_statistics WHERE stream_name = ? AND channel_name = ?;";
-		boolean isUpdate = false;
-		try {
-			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, s.name);
-			pstmt.setString(2, c.name);
-			ResultSet rset = pstmt.executeQuery();
-			if (rset.next()) {
-				isUpdate = true;
-				sql = "UPDATE channel_statistics SET "
-						+ "min_value = ?, "
-						+ "max_value = ? "
-						+ "WHERE id = ? AND stream_name = ? AND channel_name = ?;";
-			} else {
-				isUpdate = false;
-				sql = "INSERT INTO channel_statistics VALUES (?,?,?,?,?)";		
-			}
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
-			}
-		}
-
-		// update/insert statistics
-		try {
-			pstmt = conn.prepareStatement(sql);
-			if (isUpdate) {
-				pstmt.setDouble(1, min);
-				pstmt.setDouble(2, max);
-				pstmt.setInt(3, s.id);
-				pstmt.setString(4, s.name);
-				pstmt.setString(5, c.name);
-			} else {
+		if (numSamples == 0) {
+			PreparedStatement pstmt = null;
+			String sql = "DELETE FROM channel_statistics WHERE id = ? AND stream_name = ?";
+			try {
+				pstmt = conn.prepareStatement(sql);
 				pstmt.setInt(1, s.id);
 				pstmt.setString(2, s.name);
-				pstmt.setString(3, c.name);
-				pstmt.setDouble(4, min);
-				pstmt.setDouble(5, max);
+				pstmt.executeUpdate();
+			} finally {
+				if (pstmt != null) {
+					pstmt.close();
+				}
 			}
-			pstmt.executeUpdate();
-		} finally {
-			if (pstmt != null) {
-				pstmt.close();
+		} else {
+
+			Log.info("Calculating channel statistics: " + s.name + "." + c.name + "...");
+
+			double min, max;
+
+			String aggregateSql = "SELECT AggregateRange('min($channel" + channelId + ")', tuples, 0)::float_rowtype"
+					+ " FROM " + s.getStreamTableName() + " WHERE id = ?";
+
+			PreparedStatement pstmt = null;
+			try {
+				pstmt = conn.prepareStatement(aggregateSql);
+				pstmt.setInt(1, s.id);
+				ResultSet rset = pstmt.executeQuery();
+				if (rset.next()) {
+					Struct struct = (Struct)rset.getObject(1);
+					min = (Double)struct.getAttributes()[1];
+				} else {
+					throw new IllegalStateException("ResultSet is null.");
+				}
+			} finally {
+				if (pstmt != null) {
+					pstmt.close();
+				}
+			}
+
+			aggregateSql = "SELECT AggregateRange('max($channel" + channelId + ")', tuples, 0)::float_rowtype"
+					+ " FROM " + s.getStreamTableName() + " WHERE id = ?";
+
+			try {
+				pstmt = conn.prepareStatement(aggregateSql);
+				pstmt.setInt(1, s.id);
+				ResultSet rset = pstmt.executeQuery();
+				if (rset.next()) {
+					Struct struct = (Struct)rset.getObject(1);
+					max = (Double)struct.getAttributes()[1];
+				} else {
+					throw new IllegalStateException("ResultSet is null.");
+				}
+			} finally {
+				if (pstmt != null) {
+					pstmt.close();
+					pstmt = null;
+				}
+			}
+
+			// Check if there is existing statistics
+			String sql = "SELECT * FROM channel_statistics WHERE stream_name = ? AND channel_name = ?;";
+			boolean isUpdate = false;
+			try {
+				pstmt = conn.prepareStatement(sql);
+				pstmt.setString(1, s.name);
+				pstmt.setString(2, c.name);
+				ResultSet rset = pstmt.executeQuery();
+				if (rset.next()) {
+					isUpdate = true;
+					sql = "UPDATE channel_statistics SET "
+							+ "min_value = ?, "
+							+ "max_value = ? "
+							+ "WHERE id = ? AND stream_name = ? AND channel_name = ?;";
+				} else {
+					isUpdate = false;
+					sql = "INSERT INTO channel_statistics VALUES (?,?,?,?,?)";		
+				}
+			} finally {
+				if (pstmt != null) {
+					pstmt.close();
+				}
+			}
+
+			// update/insert statistics
+			try {
+				pstmt = conn.prepareStatement(sql);
+				if (isUpdate) {
+					pstmt.setDouble(1, min);
+					pstmt.setDouble(2, max);
+					pstmt.setInt(3, s.id);
+					pstmt.setString(4, s.name);
+					pstmt.setString(5, c.name);
+				} else {
+					pstmt.setInt(1, s.id);
+					pstmt.setString(2, s.name);
+					pstmt.setString(3, c.name);
+					pstmt.setDouble(4, min);
+					pstmt.setDouble(5, max);
+				}
+				pstmt.executeUpdate();
+			} finally {
+				if (pstmt != null) {
+					pstmt.close();
+				}
 			}
 		}
 	}
@@ -1243,7 +1261,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		try {
 			// Get number of samples.
 			if (isUpdateNumSamples) {
-				long n = executeGetCountSql(sql.streamTableName, stream.id, sql.startTime, sql.endTime);
+				long n = executeGetCountSql(conn, sql.streamTableName, stream.id, sql.startTime, sql.endTime);
 				stream.num_samples = n;
 			}
 
@@ -1404,7 +1422,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				if (prevTs != null && prevValues != null) {
 					long n = -1;
 					if (agg.isAvgAggregator) {
-						n = executeGetCountSql(aggTargetStreamTableName, sql.stream.id, prevTs, timestamp);
+						n = executeGetCountSql(conn, aggTargetStreamTableName, sql.stream.id, prevTs, timestamp);
 					}
 					addNoiseAndExecuteUpdate(pstmt2, agg, prevTs, prevValues, noiseGenerators, n);
 				}
@@ -1415,7 +1433,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			// Process last aggregate
 			long n = -1;
 			if (agg.isAvgAggregator) {
-				n = executeGetCountSql(aggTargetStreamTableName, sql.stream.id, prevTs, sql.endTime);
+				n = executeGetCountSql(conn, aggTargetStreamTableName, sql.stream.id, prevTs, sql.endTime);
 			}
 			addNoiseAndExecuteUpdate(pstmt2, agg, prevTs, prevValues, noiseGenerators, n);
 
@@ -1434,7 +1452,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return sql;
 	}
 
-	private long executeGetCountSql(String streamTableName, int streamId, Timestamp startTs, Timestamp endTs) throws SQLException {
+	private static long executeGetCountSql(Connection conn, String streamTableName, int streamId, Timestamp startTs, Timestamp endTs) throws SQLException {
 		int numSamples;
 		PreparedStatement pstmt = null;
 		String countSql;
@@ -1443,7 +1461,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		} else {
 			countSql = "SELECT ClipGetCount(tuples,?,?) FROM " + streamTableName + " WHERE id = ?";	
 		}
+
 		Log.info(countSql);
+
 		try {
 			pstmt = conn.prepareStatement(countSql);
 			if (startTs != null || endTs != null) {
@@ -1463,11 +1483,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				pstmt.close();
 			}
 		}
-		Log.info(
-				(startTs == null ? startTs : startTs.toString()) 
-				+ " ~ " 
-				+ (endTs == null ? endTs : endTs.toString()) 
-				+ ": numSamples = " + numSamples);
+
 		return numSamples;
 	}
 

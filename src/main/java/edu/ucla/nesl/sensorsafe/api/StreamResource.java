@@ -108,6 +108,8 @@ public class StreamResource {
 					+ "&emsp; - Macros: e.g., $(MACRO_NAME)<BR>"
 					+ "&emsp; - Condition on other stream: OTHER_STREAM_NAME.CHANNEL_NAME<BR>"
 					+ "&emsp;&emsp;  e.g., activity.value = 'still'<BR>"
+					+ "&emsp; - GPS distance function in meters: gps_distance(latitude1, longitude1, latitude2, longitude2)<BR>"
+					+ "&emsp;&emsp;  e.g., gps_distance(location.latitude, location.longitude, 34.052233, -118.308862) <= 500.0<BR>"
 					+ "<BR>"
 					+ "<BR>"
 					+ "<b>aggregator</b><BR>"

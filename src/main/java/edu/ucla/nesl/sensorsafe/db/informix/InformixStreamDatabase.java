@@ -240,9 +240,22 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				}
 			}			
 			conn.setTypeMap(typeMap);
-
+			pstmt.close();
+			
 			// check channel statistics table.
 			//checkChannelStatistics(conn);
+			
+			// Check GPS distance function
+			// Check streams table
+			sql = "SELECT 1 FROM sysprocedures WHERE procname = ?";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, SqlBuilder.SQL_GPS_DISTANCE_FUNCTION_NAME);
+			rset = pstmt.executeQuery();
+			if (!rset.next()) {
+				createSqlGpsDistanceFunction(conn);
+			}
+			pstmt.close();
+			
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
@@ -252,6 +265,24 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				conn.close();
 		}
 
+	}
+
+	private static void createSqlGpsDistanceFunction(Connection conn) throws SQLException {
+		
+		String sql = "CREATE FUNCTION calc_gps_dist_in_meters(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)\n"
+					+ "  RETURNING FLOAT;\n"
+					+ "  RETURN 6371009 * (ST_Distance('4 point(' || lon1::CHAR(20) || ' ' || lat1::CHAR(20) || ')', '4 point(' || lon2::CHAR(20) || ' ' || lat2::CHAR(20) || ')') * 3.141592 / 180.0);\n"
+					+ "END FUNCTION;";
+		
+		Statement stmt = null;
+		try {
+			stmt = conn.createStatement();
+			stmt.execute(sql);
+		} finally {
+			if (stmt != null) {
+				stmt.close();
+			}
+		}
 	}
 
 	private static void checkChannelStatistics(Connection conn) throws SQLException {

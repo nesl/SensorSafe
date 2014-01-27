@@ -21,6 +21,9 @@ import edu.ucla.nesl.sensorsafe.tools.Log;
 
 public class SqlBuilder {
 
+	private static final String GPS_DISTANCE_FUNCTION = "gps_distance";
+	public static final String SQL_GPS_DISTANCE_FUNCTION_NAME = "calc_gps_dist_in_meters";
+	
 	private static final String DATETIME_SECOND = "timestamp::DATETIME SECOND TO SECOND::CHAR(2)::INT";
 	private static final String DATETIME_MINUTE = "timestamp::DATETIME MINUTE TO MINUTE::CHAR(2)::INT";
 	private static final String DATETIME_HOUR = "timestamp::DATETIME HOUR TO HOUR::CHAR(2)::INT";
@@ -176,6 +179,16 @@ public class SqlBuilder {
 		convertCStyleBooleanOperators();
 		convertDateTimePartExpression();		
 		convertChannelNames();
+		convertDistanceFunctionName();
+	}
+
+	private void convertDistanceFunctionName() {
+		if (condFilter != null) {
+			condFilter = condFilter.replace(GPS_DISTANCE_FUNCTION, SQL_GPS_DISTANCE_FUNCTION_NAME);
+		}
+		if (condRules != null) {
+			condRules = condRules.replace(GPS_DISTANCE_FUNCTION, SQL_GPS_DISTANCE_FUNCTION_NAME);
+		}
 	}
 
 	private String replaceStringNoDotPrefix(String expr, String from, String to) {

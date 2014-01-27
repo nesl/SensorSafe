@@ -1711,22 +1711,24 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	private SqlBuilder processConditionOnOtherStreams(SqlBuilder sql, String streamOwner) throws SQLException {
 
 		// Check if the sql contains expression: STREAM_NAME.CHANNEL_NAME
-		Pattern cronExprPattern = Pattern.compile("\\s[a-zA-Z]+[a-zA-Z0-9_]*\\.[a-zA-Z]+[a-zA-Z0-9_]*\\s");
-		Matcher matcher = cronExprPattern.matcher(sql.getWhereCondition());
+		Pattern streamReferPattern = Pattern.compile("[a-zA-Z]+[a-zA-Z0-9_]*\\.[a-zA-Z]+[a-zA-Z0-9_]*");
+		Matcher matcher = streamReferPattern.matcher(sql.getWhereCondition());
 		Map<Stream, Set<String>> otherStreamMap = new HashMap<Stream, Set<String>>();
 		while (matcher.find()) {
 			String expr = matcher.group();
 			expr = expr.replace(" ", "");
 			String[] splitExpr = expr.split("\\.");
-			String otherStream = splitExpr[0];
+			String otherStreamName = splitExpr[0];
 			String otherChannel = splitExpr[1];
 
+			Stream otherStream = getStream(streamOwner, otherStreamName);
+			
 			if (otherStreamMap.containsKey(otherStream)) {
 				otherStreamMap.get(otherStream).add(otherChannel);
 			} else {
 				Set<String> channelSet = new HashSet<String>();
 				channelSet.add(otherChannel);
-				otherStreamMap.put(getStream(streamOwner, otherStream), channelSet);				
+				otherStreamMap.put(getStream(streamOwner, otherStreamName), channelSet);				
 			}
 		}		
 

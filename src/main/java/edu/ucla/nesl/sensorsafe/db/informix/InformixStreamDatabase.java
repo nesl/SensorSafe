@@ -241,10 +241,10 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			}			
 			conn.setTypeMap(typeMap);
 			pstmt.close();
-			
+
 			// check channel statistics table.
 			//checkChannelStatistics(conn);
-			
+
 			// Check GPS distance function
 			// Check streams table
 			sql = "SELECT 1 FROM sysprocedures WHERE procname = ?";
@@ -255,7 +255,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				createSqlGpsDistanceFunction(conn);
 			}
 			pstmt.close();
-			
+
 		} finally {
 			if (pstmt != null)
 				pstmt.close();
@@ -268,12 +268,12 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	}
 
 	private static void createSqlGpsDistanceFunction(Connection conn) throws SQLException {
-		
+
 		String sql = "CREATE FUNCTION calc_gps_dist_in_meters(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)\n"
-					+ "  RETURNING FLOAT;\n"
-					+ "  RETURN 6371009 * (ST_Distance('4 point(' || lon1::CHAR(20) || ' ' || lat1::CHAR(20) || ')', '4 point(' || lon2::CHAR(20) || ' ' || lat2::CHAR(20) || ')') * 3.141592 / 180.0);\n"
-					+ "END FUNCTION;";
-		
+				+ "  RETURNING FLOAT;\n"
+				+ "  RETURN 6371009 * (ST_Distance('4 point(' || lon1::CHAR(20) || ' ' || lat1::CHAR(20) || ')', '4 point(' || lon2::CHAR(20) || ' ' || lat2::CHAR(20) || ')') * 3.141592 / 180.0);\n"
+				+ "END FUNCTION;";
+
 		Statement stmt = null;
 		try {
 			stmt = conn.createStatement();
@@ -1753,7 +1753,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			String otherChannel = splitExpr[1];
 
 			Stream otherStream = getStream(streamOwner, otherStreamName);
-			
+
 			if (otherStreamMap.containsKey(otherStream)) {
 				otherStreamMap.get(otherStream).add(otherChannel);
 			} else {
@@ -2520,25 +2520,38 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	public void addOrUpdateMacro(String owner, Macro macro) throws SQLException {
 		PreparedStatement pstmt = null;
 		try {
-			String sql = "SELECT macro_name FROM macros WHERE macro_name = ?;";
-			pstmt = conn.prepareStatement(sql);
-			pstmt.setString(1, macro.name);
-			ResultSet rset = pstmt.executeQuery();
-			if (rset.next()) {
-				pstmt.close();
-				sql = "UPDATE macros SET macro_value = ? WHERE macro_name = ?;";
-				pstmt = conn.prepareStatement(sql);
-				pstmt.setString(1, macro.value);
-				pstmt.setString(2, macro.name);
+			String sql;
+			if (macro.id != 0) {
+				sql = "UPDATE macros SET macro_name = ?, macro_value = ? WHERE owner = ? AND id = ?;";
+				pstmt = conn.prepareStatement(sql);				
+				pstmt.setString(1, macro.name);
+				pstmt.setString(2, macro.value);
+				pstmt.setString(3, owner);
+				pstmt.setInt(4, macro.id);
 				pstmt.executeUpdate();
 			} else {
-				pstmt.close();
-				sql = "INSERT INTO macros (owner, macro_name, macro_value) VALUES (?,?,?);";
+				sql = "SELECT macro_name FROM macros WHERE owner = ? AND macro_name = ?;";
 				pstmt = conn.prepareStatement(sql);
 				pstmt.setString(1, owner);
 				pstmt.setString(2, macro.name);
-				pstmt.setString(3, macro.value);
-				pstmt.executeUpdate();
+				ResultSet rset = pstmt.executeQuery();
+				if (rset.next()) {
+					pstmt.close();
+					sql = "UPDATE macros SET macro_value = ? WHERE owner = ? AND macro_name = ?;";
+					pstmt = conn.prepareStatement(sql);
+					pstmt.setString(1, macro.value);
+					pstmt.setString(2, owner);
+					pstmt.setString(3, macro.name);
+					pstmt.executeUpdate();
+				} else {
+					pstmt.close();
+					sql = "INSERT INTO macros (owner, macro_name, macro_value) VALUES (?,?,?);";
+					pstmt = conn.prepareStatement(sql);
+					pstmt.setString(1, owner);
+					pstmt.setString(2, macro.name);
+					pstmt.setString(3, macro.value);
+					pstmt.executeUpdate();
+				}
 			}
 		} finally {
 			if (pstmt != null)

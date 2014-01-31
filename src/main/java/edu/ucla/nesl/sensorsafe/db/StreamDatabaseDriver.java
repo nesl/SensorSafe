@@ -6,8 +6,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 
-import net.minidev.json.JSONArray;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import edu.ucla.nesl.sensorsafe.model.Macro;
@@ -18,7 +16,9 @@ import edu.ucla.nesl.sensorsafe.model.TemplateParameterDefinition;
 public interface StreamDatabaseDriver extends DatabaseDriver {
 	
 	public List<Rule> getRules(String owner) throws SQLException;
-	
+
+	public List<Rule> getRulesWithTags(String owner, String tags) throws SQLException;
+
 	public void addUpdateRuleTemplate(String owner, Rule rule) throws SQLException;
 	
 	public void deleteAllRules(String owner) throws SQLException;
@@ -64,4 +64,5 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public Object[] getNextTuple() throws SQLException;
 
 	public ResultSet getStoredResultSet();
+
 }

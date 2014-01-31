@@ -481,7 +481,8 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 					+ "condition VARCHAR(255), "
 					+ "action VARCHAR(255) NOT NULL, "					
 					+ "template_name VARCHAR(255), "
-					+ "is_aggregator BOOLEAN NOT NULL"
+					+ "is_aggregator BOOLEAN NOT NULL, "
+					+ "tags VARCHAR(255)"
 					+ ") LOCK MODE ROW;");
 		} 
 		finally {
@@ -546,7 +547,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			String sql;
 			if (rule.id == 0) {
 				// Add new rule
-				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority, template_name, is_aggregator) VALUES (?,?,?,?,?,?,?,?)";
+				sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority, template_name, is_aggregator, tags) VALUES (?,?,?,?,?,?,?,?,?)";
 			} else {
 				// Update existing rule or create new rule if id doesn't exist.
 				pstmt = conn.prepareStatement("SELECT 1 FROM rules WHERE id = ?");
@@ -560,10 +561,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 							+ "action = ?, "
 							+ "priority = ?, "
 							+ "template_name = ?, "
-							+ "is_aggregator = ? "
+							+ "is_aggregator = ?, "
+							+ "tags = ? "
 							+ "WHERE id = ?";
 				} else {
-					sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority, template_name, is_aggregator, id) VALUES (?,?,?,?,?,?,?,?,?)";
+					sql = "INSERT INTO rules (owner, target_users, target_streams, condition, action, priority, template_name, is_aggregator, tags, id) VALUES (?,?,?,?,?,?,?,?,?,?)";
 				}
 			}
 			if (pstmt != null)
@@ -581,8 +583,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			}
 			pstmt.setString(7, rule.template_name);
 			pstmt.setBoolean(8, isAggregator);
+			pstmt.setString(9, rule.tags);
 			if (rule.id != 0) {
-				pstmt.setInt(9, rule.id);
+				pstmt.setInt(10, rule.id);
 			} 
 			pstmt.executeUpdate();
 		} finally {
@@ -653,11 +656,15 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 	}
 
 	@Override
-	public List<Rule> getRules(String owner) throws SQLException {
+	public List<Rule> getRulesWithTags(String owner, String tags) throws SQLException {
 		PreparedStatement pstmt = null;
 		List<Rule> rules = new ArrayList<Rule>();
 		try {
-			String sql = "SELECT id, target_users, target_streams, condition, action, priority, is_aggregator FROM rules WHERE owner = ? AND template_name IS NULL";
+			String sql = "SELECT id, target_users, target_streams, condition, action, priority, tags, is_aggregator FROM rules WHERE owner = ? AND template_name IS NULL";
+			String tagCond = generateTagSearchCondition(tags);
+			if (tagCond.length() > 0) {
+				sql += " AND " + tagCond;
+			}
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, owner);
 			ResultSet rset = pstmt.executeQuery();
@@ -667,7 +674,49 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
 				sqlArr = rset.getArray(3);
 				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
-				rules.add(new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5), rset.getInt(6)));
+				Rule rule = new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5), rset.getInt(6));
+				rule.tags = rset.getString(7);
+				rules.add(rule);
+			}
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+		return rules;
+	}
+
+	private String generateTagSearchCondition(String tags) {
+		String splitTags[] = tags.split(",");
+		String cond = "";
+		for (String tag: splitTags) {
+			cond += "tags MATCHES('*" + tag.trim() + "*') OR "; 
+		}
+		if (cond.length() > 0) {
+			cond = cond.substring(0, cond.length() - 4);
+			return "( " + cond + " )";
+		} else {
+			return "";
+		}
+	}
+
+	@Override
+	public List<Rule> getRules(String owner) throws SQLException {
+		PreparedStatement pstmt = null;
+		List<Rule> rules = new ArrayList<Rule>();
+		try {
+			String sql = "SELECT id, target_users, target_streams, condition, action, priority, tags, is_aggregator FROM rules WHERE owner = ? AND template_name IS NULL";
+			pstmt = conn.prepareStatement(sql);
+			pstmt.setString(1, owner);
+			ResultSet rset = pstmt.executeQuery();
+			while (rset.next()) {
+				int id = rset.getInt(1);
+				Array sqlArr = rset.getArray(2);
+				Object[] targetUsers = sqlArr != null ? (Object[])sqlArr.getArray() : null;
+				sqlArr = rset.getArray(3);
+				Object[] targetStreams = sqlArr != null ? (Object[])sqlArr.getArray() : null;
+				Rule rule = new Rule(id, targetUsers, targetStreams, rset.getString(4), rset.getString(5), rset.getInt(6));
+				rule.tags = rset.getString(7);
+				rules.add(rule);
 			}
 		} finally {
 			if (pstmt != null)

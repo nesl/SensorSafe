@@ -21,7 +21,6 @@ public class Channel {
 	@NotNull
 	public String type;
 	
-	@XmlElement(name = "statistics")
 	public Statistics statistics;
 
 	public Channel() {}

@@ -6,7 +6,6 @@ import java.util.Set;
 import javax.validation.constraints.NotNull;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
-import javax.xml.bind.annotation.XmlTransient;
 
 import org.apache.commons.lang.StringUtils;
 
@@ -46,6 +45,9 @@ public class Rule {
 	@XmlElement(name = "template_name")
 	public String template_name;
 	
+	@XmlElement(name = "tags")
+	public String tags;
+	
 	public Rule() {}
 	
 	public Rule(int id, Object[] targetUsers, Object[] targetStreams, String condition, String action, int priority) {
@@ -72,7 +74,6 @@ public class Rule {
 		this.template_name = templateName;
 	}
 
-	@XmlTransient
 	public boolean isValidRule() {
 		boolean isAggregator = false;
 

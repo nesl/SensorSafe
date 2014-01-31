@@ -42,17 +42,24 @@ public class RuleResource {
 	private SecurityContext securityContext;
 
 	@GET
-    @ApiOperation(value = "List current rules.", notes = "TBD")
-    @ApiResponses(value = {
-    		@ApiResponse(code = 500, message = "Internal Server Error")
-    })
-	public List<Rule> doGet() throws JsonProcessingException {
+	@ApiOperation(value = "List current rules.", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
+	public List<Rule> doGet(
+			@ApiParam(name = "tags", value = "Rule tags to search.")
+			@QueryParam("tags")	final String tags
+			) throws JsonProcessingException {
 		String ownerName = securityContext.getUserPrincipal().getName();
-    	List<Rule> rules = null;
-    	StreamDatabaseDriver db = null;
+		List<Rule> rules = null;
+		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-			rules = db.getRules(ownerName);
+			if (tags != null) {
+				rules = db.getRulesWithTags(ownerName, tags);
+			} else {
+				rules = db.getRules(ownerName);
+			}
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -64,24 +71,24 @@ public class RuleResource {
 				}
 			}
 		}
-    	
-    	return rules;
+
+		return rules;
 	}
 
-    @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @ApiOperation(value = "Add or update a rule", notes = "TBD")
-    @ApiResponses(value = {
-    		@ApiResponse(code = 500, message = "Internal Server Error")
-    })
-    public ResponseMsg doPost(
-    		@ApiParam(name = "rule", value = "Please refer to the description below.")
-    		@Valid Rule rule) throws JsonProcessingException {
-    	String ownerName = securityContext.getUserPrincipal().getName();
-    	StreamDatabaseDriver db = null;
-    	try {
-    		db = DatabaseConnector.getStreamDatabase();
-    		db.addUpdateRuleTemplate(ownerName, rule);
+	@POST
+	@Consumes(MediaType.APPLICATION_JSON)
+	@ApiOperation(value = "Add or update a rule", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
+	public ResponseMsg doPost(
+			@ApiParam(name = "rule", value = "Please refer to the description below.")
+			@Valid Rule rule) throws JsonProcessingException {
+		String ownerName = securityContext.getUserPrincipal().getName();
+		StreamDatabaseDriver db = null;
+		try {
+			db = DatabaseConnector.getStreamDatabase();
+			db.addUpdateRuleTemplate(ownerName, rule);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
@@ -95,24 +102,24 @@ public class RuleResource {
 				}
 			}
 		}
-    	
-    	return new ResponseMsg("Sucessfully added/updated the rule.");
-    }
-    
-    @DELETE
-    @ApiOperation(value = "Delete rules.", notes = "TBD")
-    @ApiResponses(value = {
-    		@ApiResponse(code = 500, message = "Internal Server Error")
-    })
-    public ResponseMsg doDelete(@QueryParam("id") int id) throws JsonProcessingException {
-    	String ownerName = securityContext.getUserPrincipal().getName();
-    	StreamDatabaseDriver db = null;
-    	try {
-    		db = DatabaseConnector.getStreamDatabase();
-    		if (id > 0) 
-    			db.deleteRule(ownerName, id);
-    		else 
-    			db.deleteAllRules(ownerName);
+
+		return new ResponseMsg("Sucessfully added/updated the rule.");
+	}
+
+	@DELETE
+	@ApiOperation(value = "Delete rules.", notes = "TBD")
+	@ApiResponses(value = {
+			@ApiResponse(code = 500, message = "Internal Server Error")
+	})
+	public ResponseMsg doDelete(@QueryParam("id") int id) throws JsonProcessingException {
+		String ownerName = securityContext.getUserPrincipal().getName();
+		StreamDatabaseDriver db = null;
+		try {
+			db = DatabaseConnector.getStreamDatabase();
+			if (id > 0) 
+				db.deleteRule(ownerName, id);
+			else 
+				db.deleteAllRules(ownerName);
 		} catch (SQLException | ClassNotFoundException | IOException | NamingException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
@@ -124,6 +131,6 @@ public class RuleResource {
 				}
 			}
 		}
-    	return new ResponseMsg("Successfully deleted rule(s).");
-    }
+		return new ResponseMsg("Successfully deleted rule(s).");
+	}
 }

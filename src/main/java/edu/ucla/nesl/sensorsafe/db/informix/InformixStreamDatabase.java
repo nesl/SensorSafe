@@ -2427,7 +2427,8 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		FileWriter fw = null;
 		BufferedWriter bw = null;
 		File file = null;
-
+		boolean isSuccessful = false;
+		
 		try {
 			String fileName = BULK_LOAD_DATA_FILE_NAME_PREFIX + newUUIDString();
 			file = new File(fileName);
@@ -2454,6 +2455,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				}
 
 				String[] cols = line.split(delimiter, 2);
+				
+				if (cols.length != 2) {
+					throw new IllegalArgumentException("Malformed input line: " + line);
+				}
+				
 				String timestamp = cols[0];
 				String values = cols[1];
 
@@ -2468,11 +2474,14 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 				bw.write(dt.toString(sqlFmt) + delimiter + values + lineSeparator);
 			}
+			isSuccessful = true;
 		} finally {
 			if (bw != null)
 				bw.close();
 			if (fw != null)
 				fw.close();
+			if (file != null && !isSuccessful)
+				file.delete();
 		}
 
 		return file;
@@ -2486,7 +2495,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				if (c.type.equals("float")) {
 					value = Double.valueOf(values[i]);
 				} else if (c.type.equals("int")) {
-					value = Integer.valueOf(values[i]);
+					value = Integer.valueOf(values[i].trim());
 				} else {
 					throw new IllegalStateException("Invalid channel type.");
 				}
@@ -2512,11 +2521,12 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		Stream stream = getStream(ownerName, streamName);
 
 		// new channel statistics will be stored in stream.channels
-		File file = createBulkloadFileAndUpdatePendingStatistics(stream, data);
-
+		File file = null;
 		PreparedStatement pstmt = null;
 
 		try {
+			file = createBulkloadFileAndUpdatePendingStatistics(stream, data);
+			
 			pstmt = conn.prepareStatement("BEGIN WORK");
 			pstmt.execute();
 			pstmt.close();
@@ -2531,8 +2541,6 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			pstmt = conn.prepareStatement("COMMIT WORK");
 			pstmt.execute();
 
-			file.delete();
-
 		} catch (SQLException e) {
 			if (e.getMessage().contains("Too many data values")) {
 				throw new IllegalArgumentException(e.getMessage());
@@ -2542,14 +2550,22 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		} finally {
 			if (pstmt != null) 
 				pstmt.close();
+			if (file != null)
+				file.delete();
 		}
 
 		// update channel statistics
 		Stream oriStream = getStream(ownerName, streamName);
 
 		for (int i = 0; i < oriStream.channels.size(); i++) {
-			double newMin = stream.channels.get(i).statistics.min;
-			double newMax = stream.channels.get(i).statistics.max;
+			Statistics stat = stream.channels.get(i).statistics;
+			
+			if (stat == null) {
+				continue;
+			}
+			
+			double newMin = stat.min;
+			double newMax = stat.max;
 			if (oriStream.channels.get(i).statistics == null) {
 				insertOrUpdateChannelStatistics(oriStream.id, oriStream.name, oriStream.channels.get(i).name, newMin, newMax);
 			} else {

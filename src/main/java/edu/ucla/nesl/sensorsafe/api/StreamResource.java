@@ -349,7 +349,7 @@ public class StreamResource {
 		return contents.toString();
 	}
 
-	public static void deleteFile(File file) throws IOException{
+	public static void deleteFile(File file) {
 		if(file.isDirectory()) {
 			//directory is empty, then delete it
 			if(file.list().length == 0) {
@@ -418,6 +418,7 @@ public class StreamResource {
 			os = new DataOutputStream(new FileOutputStream(file));
 			os.write(data);
 		} catch (IOException e) {
+			deleteTempZipFiles(zipFileName, unzipFolderName);
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} finally {
 			try {
@@ -433,17 +434,30 @@ public class StreamResource {
 		try {
 			unzippedFileName = unzip(zipFileName, unzipFolderName);
 		} catch (IOException | UnsupportedOperationException e) {
+			deleteTempZipFiles(zipFileName, unzipFolderName);
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		}
 
+		// Check unzipped filename
+		if (unzippedFileName == null) {
+			deleteTempZipFiles(zipFileName, unzipFolderName);
+			throw WebExceptionBuilder.buildBadRequest("Problem with Zip file.");
+		}
+		
 		// Read the file into memory.
 		String unzippedData = null;
 		try {
 			unzippedData = readEntireFile(unzippedFileName);
 		} catch (IOException e) {
+			deleteTempZipFiles(zipFileName, unzipFolderName);
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		}
 
+		if (unzippedData.length() <= 0) {
+			deleteTempZipFiles(zipFileName, unzipFolderName);
+			throw WebExceptionBuilder.buildBadRequest("Empty data.");
+		}
+		
 		// Pass unzipped data to database
 		String ownerName = securityContext.getUserPrincipal().getName();
 		StreamDatabaseDriver db = null;
@@ -453,7 +467,7 @@ public class StreamResource {
 		} catch (SQLException | IOException | ClassNotFoundException | NamingException | NoSuchAlgorithmException e) {
 			throw WebExceptionBuilder.buildInternalServerError(e);
 		} catch (IllegalArgumentException e) {
-			throw WebExceptionBuilder.buildBadRequest(e);
+			throw WebExceptionBuilder.buildBadRequest(e.getClass().getSimpleName() + ": " + e.getMessage());
 		} finally {
 			if (db != null) {
 				try {
@@ -462,21 +476,20 @@ public class StreamResource {
 					e.printStackTrace();
 				}
 			}
-		}
-
-		// Delete temporary files
-		File zipFile = new File(zipFileName);
-		File zipFolder = new File(unzipFolderName);
-		try {
-			deleteFile(zipFile);
-			deleteFile(zipFolder);
-		} catch (IOException e) {
-			throw WebExceptionBuilder.buildInternalServerError(e); 
+			
+			deleteTempZipFiles(zipFileName, unzipFolderName);
 		}
 
 		return new ResponseMsg("Successfully completed zip bulkloading.");
 	}
 
+	private void deleteTempZipFiles(String zipFileName, String unzipFolderName) {
+		// Delete temporary files
+		File zipFile = new File(zipFileName);
+		File zipFolder = new File(unzipFolderName);
+		deleteFile(zipFile);
+		deleteFile(zipFolder);
+	}
 
 	@RolesAllowed(Roles.OWNER)
 	@POST

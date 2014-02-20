@@ -1228,6 +1228,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			String filter,
 			int limit, 
 			int offset,
+			int skipEveryNth,
 			boolean isUpdateNumSamples) throws SQLException, ClassNotFoundException {
 
 		// Check if stream name exists.
@@ -1251,7 +1252,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		Stream stream = getStream(streamOwner, streamName);
 
 		// Build SQL
-		SqlBuilder sql = new SqlBuilder(offset, limit, startTs, endTs, filter, stream);
+		SqlBuilder sql = new SqlBuilder(offset, limit, startTs, endTs, filter, skipEveryNth, stream);
 
 		// Apply rule condition.
 		if (!streamOwner.equals(requestingUser)) {
@@ -2012,6 +2013,36 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 
+	@Override
+	public boolean getNextTuple(Object[] tuple) throws SQLException {
+		if (storedResultSet == null) {
+			cleanUpStoredInfo();
+			return false;
+		}
+
+		if (storedResultSet.isClosed() || storedResultSet.isAfterLast()) {
+			cleanUpStoredInfo();
+			return false;
+		}
+
+		int tupleSize = storedStream.channels.size() + 1;
+		if (tupleSize > tuple.length) {
+			throw new UnsupportedOperationException("Passed tuple[] length is not sufficient.");
+		}
+		
+		if (storedResultSet.next()) {
+			tuple[0] = storedResultSet.getTimestamp(2).getTime(); // epoch in ms.
+			int startColIdx = 3;
+			for (int i = 0; i < storedStream.channels.size(); i++) {
+				tuple[i + 1] = storedResultSet.getObject(startColIdx + i);
+			}
+			return true;
+		} else {
+			cleanUpStoredInfo();
+			return false;
+		}
+	}
+
 	private String getRuleCondition(String streamOwner, String requestingUser, Stream stream) throws SQLException {
 
 		PreparedStatement pstmt = null;
@@ -2447,7 +2478,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 			// Determine date time format
 			DateTimeFormatter fmt = findDateTimeFormat(lines, delimiter);
-			DateTimeFormatter sqlFmt = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN);
+			DateTimeFormatter sqlFmt = DateTimeFormat.forPattern(SQL_DATE_TIME_PATTERN_WITH_FRACTION);
 
 			for (String line: lines) {
 				if (line == null) {

@@ -27,7 +27,12 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	
 	public void addTuple(String owner, String streamName, String strTuple) throws SQLException;
 	
-	public boolean prepareQuery(String requestingUser,	 String streamOwner, String streamName, String startTime, String endTime, String aggregator, String filter, int limit, int offset, boolean isUpdateNumSamples) throws SQLException, JsonProcessingException, ClassNotFoundException;
+	public boolean prepareQuery(String requestingUser,	 String streamOwner
+			, String streamName, String startTime, String endTime
+			, String aggregator, String filter
+			, int limit, int offset, int skipEveryNth
+			, boolean isUpdateNumSamples) 
+					throws SQLException, JsonProcessingException, ClassNotFoundException;
 	
 	public Stream getStream(String owner, String name) 	throws SQLException;
 	
@@ -64,5 +69,7 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 	public Object[] getNextTuple() throws SQLException;
 
 	public ResultSet getStoredResultSet();
+
+	public boolean getNextTuple(Object[] tuple) throws SQLException;
 
 }

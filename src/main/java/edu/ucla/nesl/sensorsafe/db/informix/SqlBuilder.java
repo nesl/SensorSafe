@@ -40,19 +40,22 @@ public class SqlBuilder {
 	public String condTimeRange;
 	public String condFilter;
 	public String condRules;
+	public String condSkipEveryNth;
 	
 	public int offset;
 	public int limit;
 	public Timestamp startTime;
 	public Timestamp endTime;
+	public int skipEveryNth;
 	
 	public Stream stream;
 	
-	public SqlBuilder(int offset, int limit, Timestamp startTime, Timestamp endTime, String filter, Stream stream) {
+	public SqlBuilder(int offset, int limit, Timestamp startTime, Timestamp endTime, String filter, int skipEveryNth, Stream stream) {
 		this.offset = offset;
 		this.limit = limit;
 		this.startTime = startTime;
 		this.endTime = endTime;
+		this.skipEveryNth = skipEveryNth;
 		
 		this.virtualTableName = stream.getVirtualTableName();
 		this.streamTableName = stream.getStreamTableName();
@@ -65,6 +68,12 @@ public class SqlBuilder {
 			condTimeRange = "timestamp >= ?";				
 		}
 		condFilter = filter;
+		
+		if (skipEveryNth > 0) {
+			condSkipEveryNth = "mod(rowid, " + skipEveryNth + ") = 0";
+		} else {
+			condSkipEveryNth = null;
+		}
 		
 		this.stream = stream;
 	}
@@ -95,7 +104,8 @@ public class SqlBuilder {
 					putParenthesis(condStreamID), 
 					putParenthesis(condTimeRange), 
 					putParenthesis(condFilter),
-					putParenthesis(condRules)
+					putParenthesis(condRules),
+					putParenthesis(condSkipEveryNth)
 				}, " AND ");
 	}
 	

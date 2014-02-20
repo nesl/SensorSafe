@@ -580,42 +580,31 @@ public class StreamResource {
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 
-			boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, true);
+			boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, 0, true);
 			Stream stream = db.getStoredStreamInfo();
 
 			if (!isData) {
 				return Response.ok("No data").build();
 			}
 
-			if (stream.num_samples > MAX_PLOT_DATA_LIMIT && aggregator == null) {
-				String calendar = "1hour";
-				String expression = "";
-				for (Channel c : stream.channels) {
-					expression += "avg($" + c.name + "), ";
-				}
-				expression = expression.substring(0, expression.length() - 2);
-				aggregator = "AggregateBy( \"" + expression + "\", \"" + calendar + "\" )";
-
-				Log.info("Aggregator: " + aggregator);
-
+			if (stream.num_samples > width) {
 				db.close();
 				db = DatabaseConnector.getStreamDatabase();
-
-				isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, true);
-
+				int skipEveryNth = (int) (stream.num_samples / width);
+				isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, skipEveryNth, true);
+				stream = db.getStoredStreamInfo();
+				
 				if (!isData) {
 					return Response.ok("No data").build();
 				}
-			} else if (stream.num_samples > MAX_PLOT_DATA_LIMIT && aggregator != null) {
-				return Response.ok("Too much data").build();
 			}
-
+			
 			// Prepare data
-			Object[] tuple = null;
 			XYSeries[] series = null;
 			long minTsInterval = Long.MAX_VALUE;  // to determine whether to use marker on the plot.
 			long prevTimestamp = -1;
-			while ((tuple = db.getNextTuple()) != null) {
+			Object[] tuple = new Object[db.getStoredStreamInfo().channels.size() + 1];
+			while (db.getNextTuple(tuple)) {
 				// Init XYSeries array
 				if (series == null) {
 					series = new XYSeries[tuple.length - 1];
@@ -625,10 +614,13 @@ public class StreamResource {
 				}
 
 				long timestamp = ((Long)tuple[0]).longValue();
-
 				for (int i = 1; i < tuple.length; i++) {
-					series[i-1].add(timestamp, (Number)tuple[i]);
-				}	
+					try {
+						series[i-1].add(timestamp, (Number)tuple[i]);
+					} catch (ClassCastException e) {
+						continue;
+					}
+				}
 
 				long diff = timestamp - prevTimestamp;
 				if (diff > 0 && diff < minTsInterval) {
@@ -675,11 +667,13 @@ public class StreamResource {
 			ChartRenderingInfo info = new ChartRenderingInfo(new StandardEntityCollection());
 			String filename = ServletUtilities.saveChartAsPNG(chart, width, height, info, session);
 
-			byte[] imageData = FileUtils.readFileToByteArray(new File("/tmp/" + filename));
-
+			File imageFile = new File("/tmp/" + filename);
+			byte[] imageData = FileUtils.readFileToByteArray(imageFile);
+			imageFile.delete();
+			
 			// Send non-streamed
-			// return Response.ok(imageData).build();
-
+			//return Response.ok(imageData).build();
+			
 			// Send streamed
 			return Response.ok(new ByteArrayInputStream(imageData)).build();
 		} catch (ClassNotFoundException | IOException | NamingException | SQLException | UnsupportedOperationException e) {
@@ -736,7 +730,7 @@ public class StreamResource {
 			}
 
 			if (!isHttpStreaming) {
-				boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, false);
+				boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, 0, false);
 				String strJson = getStreamJsonPrefix(db.getStoredStreamInfo());
 				if (isData) {
 					Object[] tuple = db.getNextTuple();
@@ -755,7 +749,7 @@ public class StreamResource {
 						StreamDatabaseDriver db = null;
 						try {
 							db = DatabaseConnector.getStreamDatabase();
-							boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, false);
+							boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, 0, false);
 							String strJson = getStreamJsonPrefix(db.getStoredStreamInfo());
 							IOUtils.write(strJson, output);
 							if (isData) {

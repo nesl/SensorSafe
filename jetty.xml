@@ -3,19 +3,12 @@
 
 <Configure id="Server" class="org.eclipse.jetty.server.Server">
 
-	<!-- <Call name="addBean">
-		<Arg>
-			<New class="org.eclipse.jetty.jaas.JAASLoginService">
-				<Set name="Name">Test Realm</Set>
-				<Set name="LoginModuleName">informix-ds-login</Set>
-			</New>
-		</Arg>
-	</Call>
-
-    <Call class="java.lang.System" name="setProperty">
-      <Arg>java.security.auth.login.config</Arg>
-      <Arg><Property name="jetty.home" default="." />/<Property name="jaas.login.conf" default="etc/login.conf"/></Arg>
-    </Call>--> 
+	<!-- <Call name="addBean"> <Arg> <New class="org.eclipse.jetty.jaas.JAASLoginService"> 
+		<Set name="Name">Test Realm</Set> <Set name="LoginModuleName">informix-ds-login</Set> 
+		</New> </Arg> </Call> <Call class="java.lang.System" name="setProperty"> 
+		<Arg>java.security.auth.login.config</Arg> <Arg><Property name="jetty.home" 
+		default="." />/<Property name="jaas.login.conf" default="etc/login.conf"/></Arg> 
+		</Call> -->
 
 	<New id="httpConfig" class="org.eclipse.jetty.server.HttpConfiguration">
 		<Set name="secureScheme">https</Set>
@@ -35,7 +28,9 @@
 	</New>
 
 	<New id="cf2" class="org.eclipse.jetty.plus.jndi.Resource">
-		<Arg><Ref refid="Server" /></Arg>
+		<Arg>
+			<Ref refid="Server" />
+		</Arg>
 		<Arg>jdbc/informix-cpds</Arg>
 		<Arg>
 			<New class="com.informix.jdbcx.IfxConnectionPoolDataSource">
@@ -57,7 +52,9 @@
 	</New>
 
 	<New id="cf1" class="org.eclipse.jetty.plus.jndi.Resource">
-		<Arg><Ref refid="Server" /></Arg>
+		<Arg>
+			<Ref refid="Server" />
+		</Arg>
 		<Arg>jdbc/informix-ds</Arg>
 		<Arg>
 			<New class="com.informix.jdbcx.IfxDataSource">
@@ -71,6 +68,24 @@
 			</New>
 		</Arg>
 	</New>
-	
+
+	<Set name="handler">
+		<New class="org.eclipse.jetty.server.handler.HandlerList">
+			<Set name="handlers">
+				<Array type="org.eclipse.jetty.server.Handler">
+					<Item>
+						<New class="org.eclipse.jetty.servlet.ServletContextHandler">
+							<Set name="contextPath">/reports</Set>
+							<Set name="resourceBase">/opt/jetty/sensorsafe_reports/</Set>
+							<Call name="addServlet">
+								<Arg>org.eclipse.jetty.servlet.DefaultServlet</Arg>
+								<Arg>/</Arg>
+							</Call>
+						</New>
+					</Item>
+				</Array>
+			</Set>
+		</New>
+	</Set>
 
 </Configure>

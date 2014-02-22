@@ -1229,7 +1229,8 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			int limit, 
 			int offset,
 			int skipEveryNth,
-			boolean isUpdateNumSamples) throws SQLException, ClassNotFoundException {
+			boolean isUpdateNumSamples,
+			String streamForRules) throws SQLException, ClassNotFoundException {
 
 		// Check if stream name exists.
 		if ( !isStreamNameExist(streamOwner, streamName) )
@@ -1256,8 +1257,14 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 		// Apply rule condition.
 		if (!streamOwner.equals(requestingUser)) {
-			String ruleAggregator = getAggregateRuleExpression(streamOwner, requestingUser, stream);
-			String ruleCond = getRuleCondition(streamOwner, requestingUser, stream);
+			String ruleTargetStream;
+			if (streamForRules != null) {
+				ruleTargetStream = streamForRules;
+			} else {
+				ruleTargetStream = streamName;
+			}
+			String ruleAggregator = getAggregateRuleExpression(streamOwner, requestingUser, ruleTargetStream);
+			String ruleCond = getRuleCondition(streamOwner, requestingUser, ruleTargetStream);
 
 			if (ruleCond == null && ruleAggregator == null) {
 				return false;
@@ -1268,6 +1275,10 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 
 			sql.makeValidSql(getMacros(streamOwner));
 
+			if (streamForRules != null && ruleAggregator != null) {
+				throw new IllegalArgumentException("Setting a stream name for rules is not supported when there is rule aggregator.");
+			}
+			
 			if (ruleAggregator != null) {
 				Aggregator agg = new Aggregator(ruleAggregator, stream.channels);
 
@@ -1304,7 +1315,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		return true;
 	}
 
-	private String getAggregateRuleExpression(String streamOwner, String requestingUser, Stream stream) throws SQLException {
+	private String getAggregateRuleExpression(String streamOwner, String requestingUser, String streamName) throws SQLException {
 
 		String sql = "SELECT action "
 				+ "FROM rules "
@@ -1320,7 +1331,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, streamOwner);
 			pstmt.setBoolean(2, true);
-			pstmt.setString(3, stream.name);
+			pstmt.setString(3, streamName);
 			pstmt.setString(4, requestingUser);
 
 			ResultSet rset = pstmt.executeQuery();
@@ -2043,7 +2054,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 
-	private String getRuleCondition(String streamOwner, String requestingUser, Stream stream) throws SQLException {
+	private String getRuleCondition(String streamOwner, String requestingUser, String streamName) throws SQLException {
 
 		PreparedStatement pstmt = null;
 		String ruleCond = null;
@@ -2060,7 +2071,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			pstmt = conn.prepareStatement(sql);
 			pstmt.setString(1, streamOwner);
 			pstmt.setBoolean(2, false);
-			pstmt.setString(3, stream.name);
+			pstmt.setString(3, streamName);
 			pstmt.setString(4, requestingUser);
 
 			ResultSet rset = pstmt.executeQuery();
@@ -2077,7 +2088,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				if (prevPriority == -1) {
 					prevPriority = priority; 
 				}
-
+				
+				Log.info(action + " on " + condition);
+								
 				// Collect conditions in same priority
 				if (prevPriority == priority) {
 					addCurrentRule(allowConds, denyConds, action, condition);
@@ -2139,7 +2152,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 		if (!denyConds.isEmpty()) {
 			if (ruleCond == null) {
-				assert false;
+				if (isAllowAll) {
+					ruleCond = "NOT ( " + StringUtils.join(denyConds, " OR ") + " )";
+				}
 			} else {
 				if (ruleCond.equals("allow all")) {
 					ruleCond = "NOT ( " + StringUtils.join(denyConds, " OR ") + " )";

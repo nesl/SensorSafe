@@ -31,7 +31,8 @@ public interface StreamDatabaseDriver extends DatabaseDriver {
 			, String streamName, String startTime, String endTime
 			, String aggregator, String filter
 			, int limit, int offset, int skipEveryNth
-			, boolean isUpdateNumSamples) 
+			, boolean isUpdateNumSamples
+			, String streamForRules) 
 					throws SQLException, JsonProcessingException, ClassNotFoundException;
 	
 	public Stream getStream(String owner, String name) 	throws SQLException;

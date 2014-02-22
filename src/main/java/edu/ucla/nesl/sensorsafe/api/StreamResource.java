@@ -580,7 +580,7 @@ public class StreamResource {
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 
-			boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, 0, true);
+			boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, 0, true, null);
 			Stream stream = db.getStoredStreamInfo();
 
 			if (!isData) {
@@ -591,7 +591,7 @@ public class StreamResource {
 				db.close();
 				db = DatabaseConnector.getStreamDatabase();
 				int skipEveryNth = (int) (stream.num_samples / width);
-				isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, skipEveryNth, true);
+				isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, 0, 0, skipEveryNth, true, null);
 				stream = db.getStoredStreamInfo();
 				
 				if (!isData) {
@@ -730,7 +730,7 @@ public class StreamResource {
 			}
 
 			if (!isHttpStreaming) {
-				boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, 0, false);
+				boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, 0, false, null);
 				String strJson = getStreamJsonPrefix(db.getStoredStreamInfo());
 				if (isData) {
 					Object[] tuple = db.getNextTuple();
@@ -749,7 +749,7 @@ public class StreamResource {
 						StreamDatabaseDriver db = null;
 						try {
 							db = DatabaseConnector.getStreamDatabase();
-							boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, 0, false);
+							boolean isData = db.prepareQuery(requestingUser, streamOwner, streamName, startTime, endTime, aggregator, filter, limit, offset, 0, false, null);
 							String strJson = getStreamJsonPrefix(db.getStoredStreamInfo());
 							IOUtils.write(strJson, output);
 							if (isData) {

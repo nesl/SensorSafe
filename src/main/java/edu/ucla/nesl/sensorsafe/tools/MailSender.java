@@ -16,8 +16,12 @@ import edu.ucla.nesl.sensorsafe.model.User;
 
 public class MailSender {
 
-	private static final String USERNAME = "sensorsafe.mailer@gmail.com";
-	private static final String PASSWORD = "sensorsaferocks!";
+	//private static final String USERNAME = "sensorsafe.mailer@gmail.com";
+	//private static final String PASSWORD = "sensorsaferocks!";
+	
+	private static final String USERNAME = "sensorprivacy@nesl.info";
+	private static final String PASSWORD = "neslrocks!";
+	
 	private static Session session;
 
 	static {

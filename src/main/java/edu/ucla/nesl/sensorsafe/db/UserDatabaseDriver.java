@@ -21,6 +21,8 @@ public interface UserDatabaseDriver extends DatabaseDriver {
 
 	public User getUser(String username) throws SQLException;
 	
+	public String getUserEmail(String username) throws SQLException;
+	
 	public void clean() throws SQLException;
 
 	public String getConsumerNameByOAuthKey(String consumerKey) throws SQLException;

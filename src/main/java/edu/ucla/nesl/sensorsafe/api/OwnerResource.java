@@ -85,8 +85,7 @@ public class OwnerResource {
     })
 	public ResponseMsg addNewOwner(
 			@ApiParam(name = "new_owner"
-					, value = "Only username and password required.  If email is provided, "
-							+ "the server will send an email with Apikey."
+					, value = "Only username and password required."
 					, required = true)
 			User newOwner) throws JsonProcessingException {
 		

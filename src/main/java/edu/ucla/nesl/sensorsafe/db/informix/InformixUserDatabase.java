@@ -142,12 +142,14 @@ public class InformixUserDatabase extends InformixDatabaseDriver implements User
 						+ USERNAME_FIELD + ", " 
 						+ PASSWORD_FIELD + ", " 
 						+ ROLE_FIELD + ", "
-						+ APIKEY_FIELD
-						+ ") VALUES (?,?,?,?)");
+						+ APIKEY_FIELD + ", "
+						+ EMAIL_FIELD
+						+ ") VALUES (?,?,?,?,?)");
 				pstmt.setString(1, newOwner.username);
 				pstmt.setString(2, newOwner.password);
 				pstmt.setString(3, Roles.OWNER);
 				pstmt.setString(4, newUUIDString());
+				pstmt.setString(5, newOwner.email);
 				pstmt.executeUpdate();
 				pstmt.close();
 			} catch (SQLException e) {
@@ -205,6 +207,27 @@ public class InformixUserDatabase extends InformixDatabaseDriver implements User
 		newConsumer.setApikey(apikey);
 		return newConsumer;
 	}
+
+	@Override
+	public String getUserEmail(String username) throws SQLException {
+		PreparedStatement pstmt = null;
+		String email = null;
+		try {
+			pstmt = conn.prepareStatement("SELECT " 
+					+ EMAIL_FIELD
+					+ " FROM " + USERS_TABLE + " WHERE " + USERNAME_FIELD + " = ?");
+			pstmt.setString(1, username);
+			ResultSet rset = pstmt.executeQuery();
+			if (rset.next()) {
+				email = rset.getString(1);
+			}
+		} finally {
+			if (pstmt != null)
+				pstmt.close();
+		}
+		return email;
+	}
+
 
 	@Override
 	public User getUser(String username) throws SQLException {

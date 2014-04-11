@@ -10,11 +10,11 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
 import javax.mail.MessagingException;
-import javax.mail.internet.AddressException;
 import javax.naming.NamingException;
 
 import org.apache.commons.io.FileUtils;
@@ -22,6 +22,7 @@ import org.jfree.chart.ChartRenderingInfo;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.axis.DateAxis;
 import org.jfree.chart.axis.NumberAxis;
+import org.jfree.chart.axis.NumberTickUnit;
 import org.jfree.chart.entity.StandardEntityCollection;
 import org.jfree.chart.plot.IntervalMarker;
 import org.jfree.chart.plot.Marker;
@@ -47,8 +48,17 @@ import edu.ucla.nesl.sensorsafe.tools.MailSender;
 
 public class CreateReportRunnable implements Runnable {
 
+	private static final String REPORTS_URL = "/reports";
+	private static final String EMAIL_TITLE = "Your reports are ready!";
+	
 	private static final String LOCATION_SENSOR = "Location";
-	private static final String[] REPORT_SENSORS = { LOCATION_SENSOR, "Activity", /*"Stress", "Conversation", "PhoneAccelerometer", "RIP", "ECG"*/ };
+	private static final String ACTIVITY_SENSOR = "Activity";
+	private static final String STRESS_SENSOR = "Stress";
+	private static final String CONVERSATION_SENSOR = "Conversation";
+	private static final String PHONE_ACCELEROMETER_SENSOR = "PhoneAccelerometer";
+	private static final String RIP_SENSOR = "RIP";
+	private static final String ECG_SENSOR = "ECG";
+	private static final String[] REPORT_SENSORS = { LOCATION_SENSOR, ACTIVITY_SENSOR, STRESS_SENSOR, CONVERSATION_SENSOR, PHONE_ACCELEROMETER_SENSOR, RIP_SENSOR, ECG_SENSOR };
 	private static final String GPS_STREAM_NAME = "PhoneGPS";
 
 	private static final String DUMMY_STREAM_NAME = "dummy_stream"; 
@@ -59,14 +69,17 @@ public class CreateReportRunnable implements Runnable {
 	private static final int MAX_SEC_A_DAY = 3600 * 24; // seconds
 	private static final int DUMMY_STREAM_INTERVAL = 5 * 60; // seconds
 
-	private static final int CHART_WIDTH = 1000;
+	private static final int CHART_WIDTH = 1200;
 	private static final int CHART_HEIGHT = 400;
 
 	public static final Object reportLock = new Object();
-	private static final String REPORT_ROOT = "/opt/jetty/sensorsafe_reports";
+	public static final String REPORT_ROOT = "/opt/jetty/sensorsafe_reports";
 	public static final String REPORT_LOCK_FILE = REPORT_ROOT + "/report_lock";
+	
 	private static final String REPORT_TEMPLATE_PATH = REPORT_ROOT + "/templates/report_template.html";
-
+	private static final String REPORT_INDEX_TEMPLATE_PATH = REPORT_ROOT + "/templates/report_index_template.html";
+	private static final String NO_DATA_TEMPLATE = REPORT_ROOT + "/templates/no_data_template.html";
+	
 	private static final int EARTH_METERS = 6367000;
 
 	private static final int GPS_CLUSTER_METER = 150; // meters
@@ -74,9 +87,12 @@ public class CreateReportRunnable implements Runnable {
 
 
 	private DateTimeFormatter fmt = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss");
+	private DateTimeFormatter fileFmt = DateTimeFormat.forPattern("yyyy-MM-dd-HH-mm-ss");
 	private DateTimeFormatter simpleFmt = DateTimeFormat.forPattern("yyyy-MM-dd");
+	private DateTimeFormatter titleFmt = DateTimeFormat.forPattern("MM/dd hh:mm aa");
 
-	private final DateTime dateTime;
+	private final DateTime startDate;
+	private final DateTime endDate;
 	private final String owner;
 
 	private double minLat;
@@ -86,6 +102,8 @@ public class CreateReportRunnable implements Runnable {
 
 	private String mGPSSamplesAllShared;
 	private String mGPSSamplesSharingFlagged;
+	
+	private String basePath;
 	
 	class Coord {
 		public int timestampInSecs;
@@ -109,9 +127,11 @@ public class CreateReportRunnable implements Runnable {
 		}
 	}
 
-	public CreateReportRunnable(DateTime date, String owner) {
-		this.dateTime = date;
+	public CreateReportRunnable(DateTime startDate, DateTime endDate, String owner, String basePath) {
+		this.startDate = startDate;
+		this.endDate = endDate;
 		this.owner = owner;
+		this.basePath = basePath;
 		File reportRoot = new File(REPORT_ROOT);
 		if (!reportRoot.exists()) {
 			reportRoot.mkdirs();
@@ -120,22 +140,22 @@ public class CreateReportRunnable implements Runnable {
 
 	@Override
 	public void run() {
-		if (!checkLock()) {
-			return;
-		}
-
 		try {
+			if (!checkLock()) {
+				return;
+			}
+
 			Log.info("Report thread running..");
 
 			// Fetch GPS data
 			Log.info("Fetching GPS data..");
 			
-			if (!generateGPSInitScript()) {
+			boolean isGPS = generateGPSInitScript(); 
+			if (!isGPS) {
 				Log.error("Generating GPS samples failed..");
-				return;
+			} else {
+				Log.info("Fetching GPS data done");
 			}
-			
-			Log.info("Fetching GPS data done");
 
 			// Read report template
 			String reportTemplate = FileUtils.readFileToString(new File(REPORT_TEMPLATE_PATH));
@@ -149,7 +169,14 @@ public class CreateReportRunnable implements Runnable {
 				generateReportForSensor(curSensor, reportTemplate);
 			}
 
-			sendEmailToOwner(owner);
+			String reportIdxFileName = generateReportIndexPage();
+			
+			if (reportIdxFileName == null) {
+				Log.error("Error generating report index.");
+				return;
+			}
+			
+			sendEmailToOwner(owner, reportIdxFileName);
 
 			Log.info("Report thread done!.");
 
@@ -160,7 +187,50 @@ public class CreateReportRunnable implements Runnable {
 		}
 	}
 
-	private void sendEmailToOwner(String username) {
+	private String generateReportIndexPage() {
+
+		try {
+			String reportIndexFileName = REPORT_ROOT + "/" + owner + "_" + fileFmt.print(startDate) + ".html";
+			String temp = FileUtils.readFileToString(new File(REPORT_INDEX_TEMPLATE_PATH));
+			String titleString = owner + "'" + "s reports (" + titleFmt.print(startDate) + " ~ " + titleFmt.print(endDate) + ")"; 
+			
+			temp = temp.replace("<!--%{title}-->", titleString);
+			
+			StringBuilder sb = new StringBuilder();
+			for (String sensor : REPORT_SENSORS) {
+				String link = owner + "_" + fileFmt.print(startDate) + "_" + sensor;
+				sb.append("<li><a href=\"./");
+				sb.append(link);
+				sb.append("\">");
+				if (sensor.equals(RIP_SENSOR)) {
+					sb.append("Breathing");
+				} else {
+					sb.append(sensor);
+				}
+				sb.append("</a></li>\n");
+			}
+			
+			temp = temp.replace("<!--%{report_list}-->", sb.toString());
+			
+			File reportIndexFile = new File(reportIndexFileName);			
+			FileUtils.writeStringToFile(reportIndexFile, temp);
+
+			return reportIndexFile.getName();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+
+	private void sendEmailToOwner(String username, String reportIdxFileName) {
+		String link = basePath + REPORTS_URL + "/" + reportIdxFileName;
+		link = "<a href=\"" + link + "\">" + link + "</a>";
+		
+		String title = EMAIL_TITLE + " (" + titleFmt.print(startDate) + " ~ " + titleFmt.print(endDate) + ")";
+		String body = "Your data reports are ready for your review at the following address:<br/><br/>" + link;
+		body += "<br/><br/>Please access the above link and provide us your feedback!<br/><br/>";
+		body += "Regards,<br/>SensorPrivacy Research Team";
+		
 		// Get email address
 		UserDatabaseDriver db = null;
 		String email = null;
@@ -191,7 +261,7 @@ public class CreateReportRunnable implements Runnable {
 		}
 		
 		try {
-			MailSender.send(email, "test", "test");
+			MailSender.send(email, title, body);
 		} catch (MessagingException e) {
 			e.printStackTrace();
 			Log.error("Error while sending email..");
@@ -203,7 +273,7 @@ public class CreateReportRunnable implements Runnable {
 
 	private void generateReportForSensor(String curSensor, String reportTemplate) {
 		// Prepare folders.
-		String folderName = owner + "_" + simpleFmt.print(dateTime) + "_" + curSensor;
+		String folderName = owner + "_" + fileFmt.print(startDate) + "_" + curSensor;
 		String destFolderName = REPORT_ROOT + "/" + folderName;
 		File destFolder = new File(destFolderName);
 		if (!destFolder.exists()) {
@@ -212,21 +282,90 @@ public class CreateReportRunnable implements Runnable {
 
 		// Handle template for GPS data
 		reportTemplate = reportTemplate.replace("/*%{title}*/", folderName);
+		reportTemplate = processSensorName(reportTemplate, curSensor);
+		if (curSensor.equals(RIP_SENSOR)) {
+			reportTemplate = reportTemplate.replace("<!--%{sensor_name}-->", "Breathing");
+		} else {
+			reportTemplate = reportTemplate.replace("<!--%{sensor_name}-->", curSensor);
+		}
 		reportTemplate = reportTemplate.replace("/*%{min_latitude}*/", "minLat = " + minLat + ";");
 		reportTemplate = reportTemplate.replace("/*%{max_latitude}*/", "maxLat = " + maxLat + ";");
 		reportTemplate = reportTemplate.replace("/*%{min_longitude}*/", "minLon = " + minLon + ";");
 		reportTemplate = reportTemplate.replace("/*%{max_longitude}*/", "maxLon = " + maxLon + ";");
-
-		if (!curSensor.equals(LOCATION_SENSOR)) {
-			reportTemplate = reportTemplate.replace("/*%{gps_values}*/", mGPSSamplesAllShared);
-			File pngFile = createPNG(curSensor, CHART_WIDTH, CHART_HEIGHT, destFolderName);
+		reportTemplate = reportTemplate.replace("/*%{dest_folder}*/", folderName);
+		reportTemplate = reportTemplate.replace("/*%{start_epoch}*/", "var startEpoch= " + startDate.getMillis() + ";");
+		reportTemplate = reportTemplate.replace("/*%{end_epoch}*/", "var endEpoch = " + endDate.getMillis() + ";");
+		
+		if (!curSensor.equals(LOCATION_SENSOR)) {			
+			if (mGPSSamplesAllShared != null) {
+				reportTemplate = reportTemplate.replace("/*%{gps_values}*/", mGPSSamplesAllShared);
+			}
+			boolean isLine = true;
+			boolean isShape = false;
+			
+			if (curSensor.equals(ACTIVITY_SENSOR)) {
+				isLine = false;
+				isShape = true;
+				reportTemplate = reportTemplate.replace("<!--%{chart_note}-->", "0 = Still, 1 = Walk, 2 = Run, 3 = Bike, 4 = Drive<br/>");
+			} else if (curSensor.equals(STRESS_SENSOR)) {
+				isLine = false;
+				isShape = true;
+				reportTemplate = reportTemplate.replace("<!--%{chart_note}-->", "0 = No stress, 1 = Stress<br/>");
+			} else if (curSensor.equals(CONVERSATION_SENSOR)) {
+				isLine = false;
+				isShape = true;
+				reportTemplate = reportTemplate.replace("<!--%{chart_note}-->", "0 = Quiet, 1 = Speaking, 2 = Smoking<br/>");
+			}
+			
+			File pngFile = createPNG(curSensor, CHART_WIDTH, CHART_HEIGHT, destFolderName, isLine, isShape);
+			
 			if (pngFile == null) {
+				String reportFileName = destFolderName + "/index.html";
+				File reportFile = new File(reportFileName);
+
+				try {
+					String noDataTemplate = FileUtils.readFileToString(new File(NO_DATA_TEMPLATE));
+					noDataTemplate = noDataTemplate.replace("<!--%{title}-->", folderName);
+					noDataTemplate = processSensorName(noDataTemplate, curSensor);
+					FileUtils.writeStringToFile(reportFile, noDataTemplate);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 				return;
 			}
+			
 			reportTemplate = reportTemplate.replace("<!--%{chart_image}-->"
 					, "<img src=\"" + pngFile.getName() + "\"/>");
+			
+			if (mGPSSamplesAllShared != null) {
+				reportTemplate = reportTemplate.replace("/*%{init_script}*/"
+						, "$(\".location_content\").hide();\n"
+						  + "$(\".non_location_content\").show();\n");
+			} else {
+				reportTemplate = reportTemplate.replace("/*%{init_script}*/"
+						, "$(\".location_content\").hide();\n"
+						  + "$(\".non_location_content\").show();\n"
+						  + "$(\".no_location_data\").hide();\n");
+			}
 		} else {
+			if (mGPSSamplesSharingFlagged == null) {
+				String reportFileName = destFolderName + "/index.html";
+				File reportFile = new File(reportFileName);
+
+				try {
+					String noDataTemplate = FileUtils.readFileToString(new File(NO_DATA_TEMPLATE));
+					noDataTemplate = noDataTemplate.replace("<!--%{title}-->", folderName);
+					noDataTemplate = processSensorName(noDataTemplate, curSensor);
+					FileUtils.writeStringToFile(reportFile, noDataTemplate);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				return;
+			}
 			reportTemplate = reportTemplate.replace("/*%{gps_values}*/", mGPSSamplesSharingFlagged);
+			reportTemplate = reportTemplate.replace("/*%{init_script}*/"
+					, "$(\".location_content\").show();\n"
+					  + "$(\".non_location_content\").hide();\n");
 		}
 
 		// Write the report.
@@ -240,15 +379,24 @@ public class CreateReportRunnable implements Runnable {
 		}
 	}
 
+	private String processSensorName(String reportTemplate, String curSensor) {
+		if (curSensor.equals(RIP_SENSOR)) {
+			reportTemplate = reportTemplate.replace("<!--%{sensor_name}-->", "Breathing");
+		} else {
+			reportTemplate = reportTemplate.replace("<!--%{sensor_name}-->", curSensor);
+		}
+		return reportTemplate;
+	}
+
 	private boolean generateGPSInitScript() {
 
 		StreamDatabaseDriver db = null;
 		String requestingUser = owner;	
 		String streamOwner = owner;
-		String startTime = fmt.print(dateTime);
-		String endTime = fmt.print(dateTime.plusDays(1));
+		String startTime = fmt.print(startDate);
+		String endTime = fmt.print(endDate);
 
-		long startTimestamp = dateTime.getMillis();
+		long startTimestamp = startDate.getMillis();
 
 		try {
 			db = DatabaseConnector.getStreamDatabase();
@@ -263,6 +411,11 @@ public class CreateReportRunnable implements Runnable {
 			Stream stream = db.getStoredStreamInfo();
 			long numSamples = stream.num_samples;
 
+			if (numSamples <= 0) {
+				Log.error("numSamples <= 0 on " + GPS_STREAM_NAME);
+				return false;
+			}
+			
 			Object[] tuple = new Object[db.getStoredStreamInfo().channels.size() + 1];
 			int timestamp;
 			Coord coords[] = new Coord[(int)numSamples];
@@ -323,6 +476,8 @@ public class CreateReportRunnable implements Runnable {
 			e.printStackTrace();
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
+		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
 		} finally {
 			if (db != null) {
 				try {
@@ -337,7 +492,7 @@ public class CreateReportRunnable implements Runnable {
 
 	private boolean isCoordUnshared(Coord coord, List<Range> unsharedRanges) {
 		for (Range range : unsharedRanges) {
-			long coordTs = coord.timestampInSecs * 1000 + dateTime.getMillis();
+			long coordTs = coord.timestampInSecs * 1000 + startDate.getMillis();
 			//Log.info("range: " + (long)range.startTimeInMillis + "~" + (long)range.endTimeInMillis + ", time: " + coordTs);
 			if (coordTs >= range.startTimeInMillis && coordTs <= range.endTimeInMillis) {
 				return true;
@@ -409,14 +564,14 @@ public class CreateReportRunnable implements Runnable {
 		}
 	}
 
-	private File createPNG(String streamName, int width, int height, String outputPath) {
+	private File createPNG(String streamName, int width, int height, String outputPath, boolean isLine, boolean isShape) {
 
 		StreamDatabaseDriver db = null;
 		String requestingUser = owner;	
 		String streamOwner = owner;
 
-		String startTime = fmt.print(dateTime);
-		String endTime = fmt.print(dateTime.plusDays(1));
+		String startTime = fmt.print(startDate);
+		String endTime = fmt.print(endDate);
 
 		try {
 			db = DatabaseConnector.getStreamDatabase();
@@ -476,6 +631,10 @@ public class CreateReportRunnable implements Runnable {
 			db.close();
 			db = null;
 
+			if (series == null) {
+				throw new UnsupportedOperationException("No data for " + streamName);
+			}
+			
 			XYSeriesCollection xyDataset = new XYSeriesCollection();
 			for (XYSeries s : series) {
 				xyDataset.addSeries(s);
@@ -492,15 +651,38 @@ public class CreateReportRunnable implements Runnable {
 
 			//  Create the chart object
 			DateAxis xAxis = new DateAxis("Time");
-			xAxis.setDateFormatOverride(new SimpleDateFormat("hh:mm aa"));
+			xAxis.setDateFormatOverride(new SimpleDateFormat("hh:mm aa"));			
 			//NumberAxis xAxis = new NumberAxis("");
+			long margin = (endDate.getMillis() - startDate.getMillis()) / 24; 
+			xAxis.setRange(new Date(startDate.getMillis() - margin), new Date(endDate.getMillis() + margin));
+			
 			NumberAxis yAxis = new NumberAxis("Value");
 			yAxis.setAutoRangeIncludesZero(false);  // override default
+			
+			if (streamName.equals(ACTIVITY_SENSOR)) {
+				yAxis.setTickUnit(new NumberTickUnit(1.0));
+				yAxis.setRange(0.0, 4.0);
+			} else if (streamName.equals(STRESS_SENSOR)) {
+				yAxis.setTickUnit(new NumberTickUnit(1.0));
+				yAxis.setRange(0.0, 1.0);
+			} else if (streamName.equals(CONVERSATION_SENSOR)) {
+				yAxis.setTickUnit(new NumberTickUnit(1.0));
+				yAxis.setRange(0.0, 2.0);
+			}
 
 			StandardXYItemRenderer renderer;
-			long dataCount = (end - start) / minTsInterval;
-			if (dataCount <= width) { 
+			//long dataCount = (end - start) / minTsInterval;
+			//if (dataCount <= width) { 
+			//	renderer = new StandardXYItemRenderer(StandardXYItemRenderer.LINES + StandardXYItemRenderer.SHAPES);
+			//} else {
+			//	renderer = new StandardXYItemRenderer(StandardXYItemRenderer.LINES);
+			//}
+			if (isLine && isShape) {
 				renderer = new StandardXYItemRenderer(StandardXYItemRenderer.LINES + StandardXYItemRenderer.SHAPES);
+			} else if (isLine && !isShape) {
+				renderer = new StandardXYItemRenderer(StandardXYItemRenderer.LINES);
+			} else if (!isLine && isShape) {
+				renderer = new StandardXYItemRenderer(StandardXYItemRenderer.SHAPES);
 			} else {
 				renderer = new StandardXYItemRenderer(StandardXYItemRenderer.LINES);
 			}
@@ -510,7 +692,8 @@ public class CreateReportRunnable implements Runnable {
 			JFreeChart chart = new JFreeChart(title, new Font(Font.SANS_SERIF, Font.BOLD, 12), plot, true);
 			//JFreeChart chart = new JFreeChart(title, plot);
 			chart.setBackgroundPaint(java.awt.Color.WHITE);
-
+			chart.removeLegend();
+			
 			// Marker
 			final Color c = new Color(255, 60, 24, 63);
 			List<Range> markerRanges = getUnsharedRanges(streamOwner, streamName);
@@ -524,7 +707,7 @@ public class CreateReportRunnable implements Runnable {
 			String filename = ServletUtilities.saveChartAsPNG(chart, width, height, info, null);
 
 			File imageFile = new File("/tmp/" +  filename);
-			File toFile = new File(outputPath + "/" + streamName + "_" + simpleFmt.print(dateTime) + ".png");
+			File toFile = new File(outputPath + "/" + streamName + "_" + fileFmt.print(startDate) + ".png");
 			imageFile.renameTo(toFile);
 
 			return toFile;
@@ -572,12 +755,12 @@ public class CreateReportRunnable implements Runnable {
 		sb.append("]");
 		Log.info(sb.toString());
 		
-		// Generate marker ranges
+		// Generate unshared ranges
 		List<Range> resultRanges = new ArrayList<Range>();
 		int prevflag = shareflags[0];
 		double curStartTime = -1;
 		if (shareflags[0] == 0) {
-			curStartTime = dateTime.getMillis();
+			curStartTime = startDate.getMillis();
 		}
 		for (int i = 1; i < shareflags.length; i++) {
 			int curflag = shareflags[i];
@@ -587,17 +770,17 @@ public class CreateReportRunnable implements Runnable {
 				if (curStartTime < 0) {
 					Log.error("invalid curStartTime at " + i);
 				}
-				double endTime = dateTime.getMillis() + i * DUMMY_STREAM_INTERVAL * 1000;
+				double endTime = startDate.getMillis() + i * DUMMY_STREAM_INTERVAL * 1000;
 				resultRanges.add(new Range(curStartTime, endTime));
 				curStartTime = -1;
 			} else if (prevflag == 1 && curflag == 0) {
-				curStartTime = dateTime.getMillis() + i * DUMMY_STREAM_INTERVAL * 1000;
+				curStartTime = startDate.getMillis() + i * DUMMY_STREAM_INTERVAL * 1000;
 			}
 			
 			prevflag = shareflags[i];
 		}
 		if (curStartTime > 0) {
-			double endTime = dateTime.getMillis() + shareflags.length * DUMMY_STREAM_INTERVAL * 1000;
+			double endTime = startDate.getMillis() + shareflags.length * DUMMY_STREAM_INTERVAL * 1000;
 			resultRanges.add(new Range(curStartTime, endTime));
 		}
 
@@ -606,9 +789,16 @@ public class CreateReportRunnable implements Runnable {
 
 	private int[] queryUsingDummyStreamAsOtherUser(String streamOwner, String streamName) throws ClassNotFoundException, SQLException, IOException, NamingException {
 		StreamDatabaseDriver db = null;
-		String startTime = fmt.print(dateTime);
-		String endTime = fmt.print(dateTime.plusDays(1).minusMillis(1));
-		int[] shareflags = new int[MAX_SEC_A_DAY / DUMMY_STREAM_INTERVAL];
+		String startTime = fmt.print(startDate);
+		String endTime = fmt.print(endDate.minusMillis(1));
+		Log.info("startTime: " + startTime + ", endTime: " + endTime);
+		long durationInSecs = (endDate.getMillis() / 1000) - (startDate.getMillis() / 1000);
+		int size = (int)(durationInSecs / DUMMY_STREAM_INTERVAL);
+		if (size <= 0) {
+			size = 1;
+		}
+		int[] shareflags = new int[size];
+		Log.info("size: " + (int)(durationInSecs / DUMMY_STREAM_INTERVAL));
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 			boolean isData = db.prepareQuery(OTHER_USER_NAME, streamOwner, DUMMY_STREAM_NAME, startTime, endTime, null, null, 0, 0, 0, false, streamName);
@@ -617,10 +807,16 @@ public class CreateReportRunnable implements Runnable {
 				return shareflags;
 			}
 			Object[] tuple = new Object[db.getStoredStreamInfo().channels.size() + 1];
-			long todayMillis = dateTime.getMillis();
+			long todayMillis = startDate.getMillis();
 			while (db.getNextTuple(tuple)) {
 				long timestamp = (Long)tuple[0];
-				shareflags[(int)((timestamp - todayMillis) / 1000 / DUMMY_STREAM_INTERVAL)] = 1;
+				//Log.info("timestamp: " + timestamp);
+				int idx = (int)((timestamp - todayMillis) / 1000 / DUMMY_STREAM_INTERVAL);
+				if (idx >= size) {
+					Log.error("idx >= size, timestamp = " + fmt.print(new DateTime(timestamp)) + ", idx = " + idx + ", size = " + size);
+				} else {
+					shareflags[idx] = 1;
+				}
 			}
 			return shareflags;
 		} finally {
@@ -664,26 +860,55 @@ public class CreateReportRunnable implements Runnable {
 		}
 
 		// Check if dummy stream has desired amount of data on today.
-		String startTime = fmt.print(dateTime);
-		String endTime = fmt.print(dateTime.plusDays(1).minusMillis(1));
+		DateTime day = simpleFmt.parseDateTime(startDate.toString(simpleFmt));
 		int targetNumSamples = MAX_SEC_A_DAY / DUMMY_STREAM_INTERVAL;
+		
+		while (day.isBefore(endDate)) {
+			Log.info("current day: " + fmt.print(day));
+
+			String startTime = fmt.print(day);
+			String endTime = fmt.print(day.plusDays(1).minusMillis(1));
+			try {
+				db = DatabaseConnector.getStreamDatabase();
+
+				boolean isData = db.prepareQuery(streamOwner, streamOwner, DUMMY_STREAM_NAME, startTime, endTime, null, null, 0, 0, 0, true, null);
+				Stream stream = db.getStoredStreamInfo();
+
+				if (!isData) {
+					Log.error("isData false");
+					throw new UnsupportedOperationException("idData false.");
+				}
+
+				if (stream.num_samples != targetNumSamples) {
+					Log.info("dummy stream is no good. Bulkloading dummy stream..");
+					bulkloadDummyStreamData(streamOwner, day);
+				} else {
+					Log.info("dummy stream is good.");
+				}
+			} finally {
+				if (db != null) {
+					try {
+						db.close();
+					} catch (SQLException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+
+			day = day.plusDays(1);
+		}
+		
+	}
+
+	private void bulkloadDummyStreamData(String streamOwner, DateTime day) throws ClassNotFoundException, SQLException, IOException, NamingException, NoSuchAlgorithmException {
+		DateTime curTime = new DateTime(day);
+		DateTime endTime = new DateTime(day.plusDays(1).minusMillis(1));
+
+		// delete for the day
+		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
-
-			boolean isData = db.prepareQuery(streamOwner, streamOwner, DUMMY_STREAM_NAME, startTime, endTime, null, null, 0, 0, 0, true, null);
-			Stream stream = db.getStoredStreamInfo();
-
-			if (!isData) {
-				Log.error("isData false");
-				throw new UnsupportedOperationException("idData false.");
-			}
-
-			if (stream.num_samples != targetNumSamples) {
-				Log.info("dummy stream is no good. Bulkloading dummy stream..");
-				bulkloadDummyStreamData(streamOwner);
-			} else {
-				Log.info("dummy stream is good.");
-			}
+			db.deleteStream(streamOwner, DUMMY_STREAM_NAME, fmt.print(curTime), fmt.print(endTime));
 		} finally {
 			if (db != null) {
 				try {
@@ -693,14 +918,9 @@ public class CreateReportRunnable implements Runnable {
 				}
 			}
 		}
-
-	}
-
-	private void bulkloadDummyStreamData(String streamOwner) throws ClassNotFoundException, SQLException, IOException, NamingException, NoSuchAlgorithmException {
+		
 		// generate a bulkload data
 		StringBuilder sb = new StringBuilder();
-		DateTime curTime = new DateTime(dateTime);
-		DateTime endTime = new DateTime(dateTime.plusDays(1));
 		while (curTime.isBefore(endTime)) {
 			sb.append(fmt.print(curTime));
 			sb.append(",1\n");
@@ -709,7 +929,6 @@ public class CreateReportRunnable implements Runnable {
 
 		// perform bulkload
 		String bulkloadData = sb.toString();
-		StreamDatabaseDriver db = null;
 		try {
 			db = DatabaseConnector.getStreamDatabase();
 			db.bulkLoad(streamOwner, DUMMY_STREAM_NAME, bulkloadData);

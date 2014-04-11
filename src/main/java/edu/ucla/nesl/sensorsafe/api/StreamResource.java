@@ -69,6 +69,7 @@ import com.wordnik.swagger.annotations.ApiParam;
 import com.wordnik.swagger.annotations.ApiResponse;
 import com.wordnik.swagger.annotations.ApiResponses;
 
+import edu.ucla.nesl.sensorsafe.CreateReportRunnable;
 import edu.ucla.nesl.sensorsafe.auth.Roles;
 import edu.ucla.nesl.sensorsafe.db.DatabaseConnector;
 import edu.ucla.nesl.sensorsafe.db.StreamDatabaseDriver;
@@ -401,6 +402,14 @@ public class StreamResource {
 					+ "</pre>")
 	byte[] data) throws JsonProcessingException {
 
+		// check if report generation is ongoing.
+		synchronized (CreateReportRunnable.reportLock) {
+			File lockFile = new File(CreateReportRunnable.REPORT_LOCK_FILE);
+			if (lockFile.exists()) {
+				throw WebExceptionBuilder.buildBadRequest("Report creation job is running..");
+			}
+		}
+		
 		// Create temporary file
 		DataOutputStream os = null;
 		File file = null;

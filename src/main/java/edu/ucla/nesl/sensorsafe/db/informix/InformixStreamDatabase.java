@@ -285,7 +285,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 		}
 	}
 
-	private static void checkChannelStatistics(Connection conn) throws SQLException {
+	private static void createFloatRowtype(Connection conn) throws SQLException {
 		PreparedStatement pstmt = null;
 
 		String createRowTypeSql = "CREATE ROW TYPE IF NOT EXISTS float_rowtype ("
@@ -300,8 +300,9 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				pstmt.close();
 				pstmt = null;
 			}
-		} 
-		List<Stream> list = getStreamList(conn, null);
+		}
+		
+		/*List<Stream> list = getStreamList(conn, null);
 		for (Stream s : list) {
 			int i = 1;
 			for (Channel c : s.channels){
@@ -310,7 +311,7 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				}
 				i++;
 			}
-		}
+		}*/
 	}
 
 	private static void calculateChannelStatistics(Connection conn, Stream s, Channel c, int channelId) throws SQLException {
@@ -335,9 +336,11 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 				}
 			}
 		} else {
-
+			
 			Log.info("Calculating channel statistics: " + s.name + "." + c.name + "...");
 
+			createFloatRowtype(conn);
+			
 			double min, max;
 
 			String aggregateSql = "SELECT AggregateRange('min($channel" + channelId + ")', tuples, 0)::float_rowtype"
@@ -1266,6 +1269,8 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			String ruleAggregator = getAggregateRuleExpression(streamOwner, requestingUser, ruleTargetStream);
 			String ruleCond = getRuleCondition(streamOwner, requestingUser, ruleTargetStream);
 
+			Log.info("ruleCond: " + ruleCond);
+			
 			if (ruleCond == null && ruleAggregator == null) {
 				return false;
 			} else if (ruleCond != null && ruleCond.equals("allow all")) {
@@ -2131,19 +2136,25 @@ public class InformixStreamDatabase extends InformixDatabaseDriver implements St
 			return null;
 		}
 		boolean isAllowAll = false;
-		if (allowConds.contains("allow all")) {
+		while (allowConds.contains("allow all")) {
 			isAllowAll = true;
 			allowConds.remove("allow all");
 		}
 		if (!allowConds.isEmpty()) {			
-			if (ruleCond == null) { 
-				ruleCond = "( " + StringUtils.join(allowConds, " OR ") + " )";
+			if (ruleCond == null) {
+				if (isAllowAll) {
+					ruleCond = null;
+				} else {
+					ruleCond = "( " + StringUtils.join(allowConds, " OR ") + " )";
+				}
 			} else {
 				if (isAllowAll) {
-					ruleCond = "( " + StringUtils.join(allowConds, " OR ") + " )";
+					//ruleCond = "( " + StringUtils.join(allowConds, " OR ") + " )";
+					ruleCond = null;
 				} else {
 					if (ruleCond.equals("allow all")) {
-						ruleCond = "( " + StringUtils.join(allowConds, " OR ") + " )";
+						//ruleCond = "( " + StringUtils.join(allowConds, " OR ") + " )";
+						ruleCond = null;
 					} else {
 						ruleCond = "( " + ruleCond + " ) OR ( " + StringUtils.join(allowConds, " OR ") + " )";	
 					}

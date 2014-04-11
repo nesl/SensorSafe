@@ -37,7 +37,7 @@ public class DiffPrivNoiseGenerator {
 	}
 
 	public double getMinMaxNoise() {
-		double lambda = epsilon * delta;
+		double lambda = epsilon / delta;
 		return getLaplaceRandom(lambda);
 	}
 
@@ -47,12 +47,12 @@ public class DiffPrivNoiseGenerator {
 	}
 
 	public double getSumNoise() {
-		double lambda = epsilon * Math.max(Math.abs(min), Math.abs(max));
+		double lambda = epsilon / Math.max(Math.abs(min), Math.abs(max));
 		return getLaplaceRandom(lambda);
 	}
 
 	public double getNthNoise() {
-		double lambda = epsilon * ( 1.0 / delta );
+		double lambda = epsilon / delta;
 		return getLaplaceRandom(lambda);
 	}
 
